@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>香港骨位地圖 (木紋冒險版)</title>
+    <title>香港骨位地圖 (型格黑魂版)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
@@ -12,128 +12,114 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;900&display=swap');
-        
-        body, html { 
-            margin: 0; padding: 0; height: 100%; 
-            background-color: #f4e8d3; /* 米黃色底 */
-            overflow: hidden; 
-            font-family: 'M PLUS Rounded 1c', sans-serif; /* 圓潤字體增加可愛感 */
-        }
+        body, html { margin: 0; padding: 0; height: 100%; background-color: #000; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         
         #map { height: 100vh; width: 100vw; z-index: 1; }
         .leaflet-control-zoom { display: none; }
         
-        /* 底部木牌介面 */
+        /* 黑魂玻璃介面 */
         #bottom-sheet { 
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
             z-index: 1000; 
-            background-color: #faeed6; /* 木板底色 */
-            background-image: repeating-linear-gradient(
-                to right,
-                rgba(255,255,255,0.2) 0px,
-                rgba(255,255,255,0.2) 2px,
-                transparent 2px,
-                transparent 20px
-            ); /* 輕微木紋質感 */
+            background: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.8);
         }
         .sheet-open { transform: translateY(0%); }
         .sheet-closed { transform: translateY(105%); }
         
-        /* JRPG 2D 按鈕風格 */
-        .btn-2d {
-            border: 3px solid #5c4033;
-            box-shadow: 0 4px 0 #5c4033;
-            transition: all 0.1s;
-        }
-        .btn-2d:active {
-            box-shadow: 0 0px 0 #5c4033;
-            transform: translateY(4px);
+        /* 螢光科技感定位點 */
+        .user-location-marker { 
+            background: #00ffcc; 
+            border: 2px solid #fff; 
+            border-radius: 50%; 
+            box-shadow: 0 0 15px #00ffcc, 0 0 30px #00ffcc; 
         }
 
-        #offline-badge { display: none; }
+        /* 隱藏預設滾動條 */
+        ::-webkit-scrollbar { display: none; }
+
+        #status-badge { display: none; }
     </style>
 </head>
 <body>
 
-    <div id="offline-badge" class="absolute top-4 left-4 z-[1001] bg-[#d2a679] text-[#5c4033] text-sm font-bold px-4 py-2 rounded-xl border-2 border-[#5c4033] shadow-[0_3px_0_#5c4033]">
-        📜 讀取地圖資訊中...
+    <div id="status-badge" class="absolute top-4 left-4 z-[1001] bg-gray-900 border border-gray-700 text-gray-300 text-xs font-bold px-4 py-2 rounded-full shadow-[0_0_15px_rgba(0,0,0,0.5)] flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full animate-pulse" id="status-dot"></span>
+        <span id="status-text">連線中...</span>
     </div>
 
     <div id="map"></div>
 
-    <button id="btn-locate" class="btn-2d absolute bottom-[4.5rem] right-6 z-[1001] bg-[#f4a261] text-white p-3 rounded-full flex items-center justify-center">
-        <svg class="w-7 h-7 text-[#5c4033]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 11c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 21c4.418 0 8-3.582 8-8s-3.582-8-8-8-8 3.582-8 8 3.582 8 8 8z"/></svg>
+    <button id="btn-locate" class="absolute bottom-[5.5rem] right-6 z-[1001] bg-gray-800 border border-gray-600 text-white p-3.5 rounded-full shadow-[0_0_20px_rgba(0,0,0,0.6)] active:scale-90 transition-transform">
+        <svg class="w-6 h-6 text-[#00ffcc]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21c4.418 0 8-3.582 8-8s-3.582-8-8-8-8 3.582-8 8 3.582 8 8 8z"/></svg>
     </button>
 
-    <div id="bottom-sheet" class="fixed bottom-0 left-0 w-full border-t-4 border-[#8b5a2b] rounded-t-3xl p-6 sheet-closed flex flex-col gap-4 pb-12 shadow-[0_-5px_15px_rgba(92,64,51,0.3)]">
-        <div class="w-16 h-2 bg-[#d2a679] rounded-full mx-auto mb-1 border border-[#8b5a2b]"></div>
+    <div id="bottom-sheet" class="fixed bottom-0 left-0 w-full rounded-t-3xl p-6 sheet-closed flex flex-col gap-4 pb-12">
+        <div class="w-12 h-1.5 bg-gray-600 rounded-full mx-auto mb-2" id="close-sheet"></div>
         
         <div class="flex justify-between items-start">
             <div class="w-2/3">
-                <h2 id="spot-name" class="text-2xl font-black text-[#5c4033] leading-tight drop-shadow-sm">請選擇骨位</h2>
-                <div class="flex gap-2 text-[#8b5a2b] font-bold text-sm mt-1">
-                    <span id="route-dist">距離計算中...</span>
-                    <span id="route-time"></span>
+                <h2 id="spot-name" class="text-2xl font-bold text-white leading-tight">請選擇骨位</h2>
+                <div class="flex gap-3 text-gray-400 text-sm mt-2">
+                    <span id="route-dist" class="bg-gray-800 px-2 py-1 rounded-md">距離...</span>
+                    <span id="route-time" class="bg-gray-800 px-2 py-1 rounded-md">時間...</span>
                 </div>
             </div>
             <div class="text-right">
-                <span class="text-xs text-[#8b5a2b] block font-bold mb-1">總位數</span>
-                <span id="spot-capacity" class="text-4xl font-black text-[#e76f51] drop-shadow-sm">--</span>
+                <span class="text-xs text-gray-500 block font-bold mb-1 tracking-wider uppercase">Capacity</span>
+                <span id="spot-capacity" class="text-4xl font-black text-[#00ffcc] drop-shadow-[0_0_10px_rgba(0,255,204,0.3)]">--</span>
             </div>
         </div>
         
-        <div class="flex gap-3 mt-3">
-            <a id="btn-waze" href="#" class="btn-2d flex-grow bg-[#2a9d8f] text-white text-center text-lg font-black py-3 rounded-2xl flex items-center justify-center">
-                Waze 導航出發
+        <div class="flex gap-3 mt-4">
+            <a id="btn-waze" href="#" class="flex-grow bg-[#00ffcc] text-black text-center text-lg font-black py-3.5 rounded-2xl flex items-center justify-center shadow-[0_0_15px_rgba(0,255,204,0.2)] active:scale-95 transition-transform">
+                Waze 導航
             </a>
-            <a id="btn-streetview" href="#" target="_blank" class="btn-2d w-20 bg-[#e9c46a] text-[#5c4033] text-center text-sm font-black py-3 rounded-2xl flex flex-col items-center justify-center">
+            <a id="btn-streetview" href="#" target="_blank" class="w-20 bg-gray-800 border border-gray-700 text-white text-center text-sm font-bold py-3.5 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-transform">
                 <span class="text-lg mb-0.5">👁️</span> 街景
             </a>
         </div>
-        <button onclick="closeSheet()" class="text-[#a67c52] font-bold text-sm py-2 mt-1 hover:text-[#5c4033]">收起詳情</button>
+        <button onclick="closeSheet()" class="text-gray-500 hover:text-white transition-colors text-sm py-2 mt-2 font-medium">關閉詳情</button>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     
     <script>
-        // 改用明亮乾淨的地圖底圖 (Voyager 羊皮紙/乾淨感)
+        // 設定地圖為 Dark Mode (CartoDB Dark Matter)
         const map = L.map('map', { zoomControl: false }).setView([22.3193, 114.1694], 11);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap &copy; CARTO'
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
         }).addTo(map);
 
+        // 群組標記樣式 (黑魂螢光綠)
         const markers = L.markerClusterGroup({
             disableClusteringAtZoom: 16,
             maxClusterRadius: 40,
             iconCreateFunction: function(cluster) {
                 const count = cluster.getChildCount();
-                // 聚集的標記也轉做木牌風格
                 return L.divIcon({
-                    html: `<div style="background-color:#d2a679; border: 3px solid #5c4033; color: #5c4033; font-weight: 900; box-shadow: 0 3px 0 #5c4033; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;">${count}</div>`,
+                    html: `<div style="background-color:rgba(17,24,39,0.9); border: 2px solid #00ffcc; color: #00ffcc; font-weight: bold; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0,255,204,0.3);">${count}</div>`,
                     className: '', iconSize: [36, 36]
                 });
             }
         });
         
         let userPos = null;
-        const CACHE_KEY = 'hk_motorcycle_spots_csv_cache';
+        const CACHE_KEY = 'hk_motorcycle_spots_csv_v12';
 
-        // 定位點：一隻淺色小貓！
         function updateLocation() {
             if(navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
                     userPos = [pos.coords.latitude, pos.coords.longitude];
                     L.marker(userPos, {
-                        icon: L.divIcon({
-                            className: '', 
-                            html: `<div style="font-size: 20px; background: #fff; border: 2.5px solid #5c4033; border-radius: 50%; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 0 #5c4033;">🐱</div>`,
-                            iconSize: [34, 34],
-                            iconAnchor: [17, 17]
-                        })
+                        icon: L.divIcon({className: 'user-location-marker', iconSize:[16,16]})
                     }).addTo(map);
-                    map.flyTo(userPos, 15, {duration: 1.5});
+                    map.flyTo(userPos, 14, {duration: 1.5});
                 }, null, {enableHighAccuracy: true});
             }
         }
@@ -145,11 +131,11 @@
             data.forEach(spot => {
                 if(!spot.lat || !spot.lng) return;
                 const marker = L.marker([spot.lat, spot.lng], {
-                    // 單個骨位標記：木牌風
+                    // 單個骨位標記
                     icon: L.divIcon({
                         className: '',
-                        html: `<div style="background-color:#faeed6; border: 2.5px solid #8b5a2b; color: #8b5a2b; font-weight: 900; font-size: 11px; box-shadow: 0 3px 0 #8b5a2b; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">${spot.capacity || '?'}</div>`,
-                        iconSize: [30, 30]
+                        html: `<div style="background-color:#111827; border: 2px solid #374151; color: #fff; font-weight: bold; font-size: 11px; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">${spot.capacity || '?'}</div>`,
+                        iconSize: [28, 28]
                     })
                 });
                 marker.on('click', () => showDetails(spot));
@@ -158,66 +144,15 @@
             map.addLayer(markers);
         }
 
-        function fetchCSVData() {
-            const badge = document.getElementById('offline-badge');
-            const cachedData = localStorage.getItem(CACHE_KEY);
-            
-            if (cachedData) {
-                renderSpots(JSON.parse(cachedData));
-                badge.innerText = "📜 正在查閱最新卷軸...";
-            }
-            badge.style.display = 'block';
-
-            const CSV_URL = 'https://raw.githubusercontent.com/g0vhk-archive/on-street-parking/master/data/motorcycle.csv'; 
-
-            Papa.parse(CSV_URL, {
-                download: true,
-                header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    try {
-                        const spots = results.data.map(row => ({
-                            lat: parseFloat(row.lat || row.Latitude),
-                            lng: parseFloat(row.lng || row.Longitude),
-                            capacity: parseInt(row.capacity || row.Space_No) || "多位",
-                            address: row.address || row.Street_Name || "未知街道"
-                        })).filter(s => !isNaN(s.lat) && !isNaN(s.lng));
-
-                        if(spots.length > 0) {
-                            renderSpots(spots);
-                            localStorage.setItem(CACHE_KEY, JSON.stringify(spots));
-                            badge.style.display = 'none'; 
-                        }
-                    } catch (e) {
-                        badge.innerText = "⛺ 離線紮營模式 (使用快取)";
-                    }
-                },
-                error: function(err) {
-                    badge.innerText = "⛺ 離線紮營模式 (無法連線)";
-                }
-            });
+        // 更新狀態 UI
+        function updateStatus(text, colorClass) {
+            const badge = document.getElementById('status-badge');
+            const dot = document.getElementById('status-dot');
+            badge.style.display = 'flex';
+            document.getElementById('status-text').innerText = text;
+            dot.className = `w-2 h-2 rounded-full animate-pulse ${colorClass}`;
         }
 
-        function showDetails(spot) {
-            document.getElementById('spot-name').innerText = spot.address;
-            document.getElementById('spot-capacity').innerText = spot.capacity;
-            document.getElementById('btn-waze').href = `waze://?ll=${spot.lat},${spot.lng}&navigate=yes`;
-            document.getElementById('btn-streetview').href = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${spot.lat},${spot.lng}`;
-
-            if(userPos) {
-                const d = map.distance(userPos, [spot.lat, spot.lng]) / 1000;
-                document.getElementById('route-dist').innerText = `直線距離: ${d.toFixed(1)} km`;
-                document.getElementById('route-time').innerText = `(約 ${Math.round(d*3)} 分鐘車程)`;
-            }
-
-            document.getElementById('bottom-sheet').classList.replace('sheet-closed', 'sheet-open');
-        }
-
-        function closeSheet() {
-            document.getElementById('bottom-sheet').classList.replace('sheet-open', 'sheet-closed');
-        }
-
-        fetchCSVData();
-    </script>
-</body>
-</html>
+        // 內置急救包數據 (確保即使斷網/Link死咗，都有基本數據顯示)
+        const emergencyFallbackSpots = [
+            { lat: 22.3204, lng: 114.16
