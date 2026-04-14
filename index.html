@@ -3,29 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>香港全港骨位地圖 (Live + 離線版)</title>
+    <title>香港骨位地圖 (自動更新 CSV 版)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background-color: #000; overflow: hidden; }
+        body, html { margin: 0; padding: 0; height: 100%; background-color: #111; overflow: hidden; }
         #map { height: 100vh; width: 100vw; z-index: 1; }
         .leaflet-control-zoom { display: none; }
         #bottom-sheet { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 1000; }
         .sheet-open { transform: translateY(0%); }
         .sheet-closed { transform: translateY(105%); }
-        .user-location-marker { background: #3b82f6; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 10px #3b82f6; }
-        /* 離線狀態標籤 */
+        
+        /* 自訂個人化定位點 - 準備好日後換貓貓 Icon */
+        .user-location-marker { 
+            background: #3b82f6; 
+            border: 2px solid #fff; 
+            border-radius: 50%; 
+            box-shadow: 0 0 12px #3b82f6; 
+        }
         #offline-badge { display: none; }
     </style>
 </head>
 <body>
 
-    <div id="offline-badge" class="absolute top-4 left-4 z-[1001] bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
-        離線模式 (使用快取數據)
+    <div id="offline-badge" class="absolute top-4 left-4 z-[1001] bg-yellow-500 text-black text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+        數據更新中...
     </div>
 
     <div id="map"></div>
@@ -34,34 +41,31 @@
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21c4.418 0 8-3.582 8-8s-3.582-8-8-8-8 3.582-8 8 3.582 8 8 8z"/></svg>
     </button>
 
-    <div id="bottom-sheet" class="fixed bottom-0 left-0 w-full bg-gray-900 border-t border-gray-700 rounded-t-3xl p-6 sheet-closed flex flex-col gap-4 pb-12 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-        <div class="w-12 h-1.5 bg-gray-600 rounded-full mx-auto mb-2" id="close-sheet"></div>
+    <div id="bottom-sheet" class="fixed bottom-0 left-0 w-full backdrop-blur-xl bg-gray-900/85 border-t border-gray-700/50 rounded-t-3xl p-6 sheet-closed flex flex-col gap-4 pb-12 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+        <div class="w-12 h-1.5 bg-gray-500 rounded-full mx-auto mb-2" id="close-sheet"></div>
         <div class="flex justify-between items-start">
             <div class="w-2/3">
                 <h2 id="spot-name" class="text-2xl font-bold text-white leading-tight">請選擇骨位</h2>
-                <div class="flex gap-2 text-gray-400 text-sm mt-1">
+                <div class="flex gap-2 text-gray-300 text-sm mt-1">
                     <span id="route-dist">距離計算中...</span>
                     <span id="route-time"></span>
                 </div>
             </div>
             <div class="text-right">
                 <span class="text-xs text-gray-400 block font-bold">總位數</span>
-                <span id="spot-capacity" class="text-4xl font-black text-green-400">--</span>
+                <span id="spot-capacity" class="text-4xl font-black text-[#33ccff]">--</span>
             </div>
         </div>
         
         <div class="flex gap-3 mt-2">
             <a id="btn-waze" href="#" class="flex-grow bg-[#33ccff] text-black text-center text-lg font-black py-3 rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-transform">
-                導航 (避相機)
+                Waze 導航
             </a>
-            <a id="btn-streetview" href="#" target="_blank" class="w-20 bg-gray-700 text-white text-center text-sm font-bold py-3 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-transform">
+            <a id="btn-streetview" href="#" target="_blank" class="w-20 bg-gray-700/60 text-white text-center text-sm font-bold py-3 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-transform">
                 <span class="text-lg mb-0.5">👁️</span> 街景
             </a>
-            <button id="btn-fav" class="w-20 bg-gray-800 border border-gray-600 text-yellow-500 text-xl py-3 rounded-2xl flex items-center justify-center active:scale-95 transition-transform">
-                ☆
-            </button>
         </div>
-        <button onclick="closeSheet()" class="text-gray-500 text-sm py-1 mt-2">關閉詳情</button>
+        <button onclick="closeSheet()" class="text-gray-400 text-sm py-1 mt-2">關閉詳情</button>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -77,9 +81,8 @@
         });
         
         let userPos = null;
-        const CACHE_KEY = 'hk_motorcycle_spots_cache';
+        const CACHE_KEY = 'hk_motorcycle_spots_csv_cache';
 
-        // 1. 獲取定位
         function updateLocation() {
             if(navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
@@ -88,22 +91,20 @@
                         icon: L.divIcon({className: 'user-location-marker', iconSize:[16,16]})
                     }).addTo(map);
                     map.flyTo(userPos, 15, {duration: 1.5});
-                }, () => {
-                    console.log("定位權限被拒絕或無法獲取");
-                }, {enableHighAccuracy: true});
+                }, null, {enableHighAccuracy: true});
             }
         }
         document.getElementById('btn-locate').onclick = updateLocation;
         updateLocation();
 
-        // 2. 處理及渲染標記
         function renderSpots(data) {
             markers.clearLayers();
             data.forEach(spot => {
+                if(!spot.lat || !spot.lng) return; // 略過無效數據
                 const marker = L.marker([spot.lat, spot.lng], {
                     icon: L.divIcon({
                         className: '',
-                        html: `<div class="bg-green-500 border-2 border-white rounded-full text-[10px] text-white font-bold flex items-center justify-center w-8 h-8 shadow-md">${spot.capacity || '?'}</div>`
+                        html: `<div class="bg-gray-800 border-2 border-[#33ccff] text-[#33ccff] rounded-full text-[10px] font-bold flex items-center justify-center w-8 h-8 shadow-md">${spot.capacity || '?'}</div>`
                     })
                 });
                 marker.on('click', () => showDetails(spot));
@@ -112,62 +113,57 @@
             map.addLayer(markers);
         }
 
-        // 3. 帶有緩存機制的數據拉取 (離線地圖核心)
-        async function fetchSpotsData() {
-            // 先嘗試讀取離線數據
+        // 使用 PapaParse 直接讀取 CSV
+        function fetchCSVData() {
+            const badge = document.getElementById('offline-badge');
+            
+            // 先渲染快取數據，確保秒速開圖
             const cachedData = localStorage.getItem(CACHE_KEY);
             if (cachedData) {
                 renderSpots(JSON.parse(cachedData));
+                badge.innerText = "正在更新最新泊位...";
             }
+            badge.style.display = 'block';
 
-            try {
-                // 建議日後替換為你自己轉換政府數據後的 JSON API 網址
-                const API_URL = 'https://raw.githubusercontent.com/g0vhk-archive/on-street-parking/master/data/motorcycle.json'; 
-                
-                // 舊 link 已失效，加入 timeout 避免卡死
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
-                
-                const response = await fetch(API_URL, { signal: controller.signal });
-                clearTimeout(timeoutId);
-                
-                if (!response.ok) throw new Error('Network response was not ok');
-                const data = await response.json();
-                
-                // 成功獲取新數據，更新快取並重新渲染
-                localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-                renderSpots(data);
-                document.getElementById('offline-badge').style.display = 'none';
+            // 這裡請替換為香港政府 Data.gov.hk 的真實 CSV 連結 (如果遇到 CORS 問題，可以在 URL 前面加 https://api.allorigins.win/raw?url=)
+            const CSV_URL = 'https://raw.githubusercontent.com/g0vhk-archive/on-street-parking/master/data/motorcycle.csv'; 
 
-            } catch (e) {
-                console.error("無法拉取最新政府數據:", e);
-                
-                if (cachedData) {
-                    // 如果有舊數據，顯示離線標籤
-                    document.getElementById('offline-badge').style.display = 'block';
-                } else {
-                    // 如果連快取都無，載入緊急備用數據 (確保地圖永遠有嘢睇)
-                    document.getElementById('offline-badge').innerText = "連線失敗：使用緊急備用數據";
-                    document.getElementById('offline-badge').style.display = 'block';
-                    const fallbackData = [
-                        { lat: 22.3204, lng: 114.1698, address: "旺角西洋菜南街", capacity: 15 },
-                        { lat: 22.2783, lng: 114.1731, address: "灣仔謝斐道", capacity: 8 },
-                        { lat: 22.2819, lng: 114.1581, address: "中環干諾道中", capacity: 12 }
-                    ];
-                    renderSpots(fallbackData);
+            Papa.parse(CSV_URL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    try {
+                        // 轉換 CSV 欄位名稱 (根據政府真實欄位調整)
+                        const spots = results.data.map(row => ({
+                            lat: parseFloat(row.lat || row.Latitude),
+                            lng: parseFloat(row.lng || row.Longitude),
+                            capacity: parseInt(row.capacity || row.Space_No) || "多位",
+                            address: row.address || row.Street_Name || "未知街道"
+                        })).filter(s => !isNaN(s.lat) && !isNaN(s.lng));
+
+                        if(spots.length > 0) {
+                            renderSpots(spots);
+                            localStorage.setItem(CACHE_KEY, JSON.stringify(spots));
+                            badge.style.display = 'none'; // 更新成功，隱藏提示
+                        }
+                    } catch (e) {
+                        badge.innerText = "離線模式 (使用快取)";
+                        badge.classList.replace('bg-yellow-500', 'bg-red-600');
+                    }
+                },
+                error: function(err) {
+                    console.error("CSV 讀取失敗:", err);
+                    badge.innerText = "無法連線，使用離線數據";
+                    badge.classList.replace('bg-yellow-500', 'bg-red-600');
                 }
-            }
+            });
         }
 
-        // 4. UI 互動
         function showDetails(spot) {
-            document.getElementById('spot-name').innerText = spot.address || spot.name || "未知街道骨位";
-            document.getElementById('spot-capacity').innerText = spot.capacity || "??";
-            
-            // Waze 導航
+            document.getElementById('spot-name').innerText = spot.address;
+            document.getElementById('spot-capacity').innerText = spot.capacity;
             document.getElementById('btn-waze').href = `waze://?ll=${spot.lat},${spot.lng}&navigate=yes`;
-            
-            // Google 街景
             document.getElementById('btn-streetview').href = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${spot.lat},${spot.lng}`;
 
             if(userPos) {
@@ -176,17 +172,14 @@
                 document.getElementById('route-time').innerText = `(約 ${Math.round(d*3)} 分鐘車程)`;
             }
 
-            document.getElementById('bottom-sheet').classList.remove('sheet-closed');
-            document.getElementById('bottom-sheet').classList.add('sheet-open');
+            document.getElementById('bottom-sheet').classList.replace('sheet-closed', 'sheet-open');
         }
 
         function closeSheet() {
-            document.getElementById('bottom-sheet').classList.remove('sheet-open');
-            document.getElementById('bottom-sheet').classList.add('sheet-closed');
+            document.getElementById('bottom-sheet').classList.replace('sheet-open', 'sheet-closed');
         }
 
-        // 初始化
-        fetchSpotsData();
+        fetchCSVData();
     </script>
 </body>
 </html>
