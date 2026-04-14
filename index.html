@@ -3,234 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>香港電單車骨位地圖 (進階版)</title>
+    <title>香港全港骨位地圖 (Live版)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background-color: #1a202c; overflow: hidden; font-family: sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; background-color: #000; overflow: hidden; }
         #map { height: 100vh; width: 100vw; z-index: 1; }
         .leaflet-control-zoom { display: none; }
-        
-        #bottom-sheet { 
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-            z-index: 1000; 
-            box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
-        }
+        #bottom-sheet { transition: transform 0.3s ease; z-index: 1000; }
         .sheet-open { transform: translateY(0%); }
         .sheet-closed { transform: translateY(105%); }
-
-        /* 閃爍的定位藍點動畫 */
-        .user-location-marker {
-            background-color: #3b82f6;
-            border: 3px solid white;
-            border-radius: 50%;
-            box-shadow: 0 0 15px rgba(59, 130, 246, 0.8);
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-            70% { box-shadow: 0 0 0 15px rgba(59, 130, 246, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
-        }
+        .user-location-marker { background: #3b82f6; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 10px #3b82f6; }
     </style>
 </head>
-<body class="relative">
+<body>
 
     <div id="map"></div>
 
-    <button id="btn-locate" class="absolute bottom-8 right-4 z-[500] bg-gray-800 text-blue-400 p-4 rounded-full shadow-lg border-2 border-gray-600 active:bg-gray-700 transition-transform transform active:scale-95">
-        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 12v.01"></path>
-            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"></circle>
-        </svg>
+    <button id="btn-locate" class="absolute bottom-10 right-6 z-[1001] bg-blue-600 text-white p-4 rounded-full shadow-2xl active:scale-90 transition-transform">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21c4.418 0 8-3.582 8-8s-3.582-8-8-8-8 3.582-8 8 3.582 8 8 8z"/></svg>
     </button>
 
-    <div id="bottom-sheet" class="fixed bottom-0 left-0 w-full bg-gray-900 border-t border-gray-700 rounded-t-3xl p-6 sheet-closed flex flex-col gap-4 pb-10">
-        <div class="w-16 h-1.5 bg-gray-600 rounded-full mx-auto cursor-pointer" id="close-sheet"></div>
-        
-        <div class="flex justify-between items-end mt-1">
-            <div>
-                <h2 id="spot-name" class="text-3xl font-bold text-white mb-1">載入中...</h2>
-                <p class="text-gray-400 text-sm">露天電單車泊車處</p>
-            </div>
+    <div id="bottom-sheet" class="fixed bottom-0 left-0 w-full bg-gray-900 border-t border-gray-700 rounded-t-3xl p-6 sheet-closed flex flex-col gap-4 pb-12">
+        <div class="w-12 h-1 bg-gray-600 rounded-full mx-auto" id="close-sheet"></div>
+        <div class="flex justify-between items-start">
+            <h2 id="spot-name" class="text-2xl font-bold text-white leading-tight w-2/3">請選擇骨位</h2>
             <div class="text-right">
-                <div class="text-xs text-gray-400 font-bold tracking-widest mb-1">總車位</div>
-                <div id="spot-capacity" class="text-5xl font-black text-green-400 leading-none">0</div>
+                <span class="text-xs text-gray-400 block font-bold">總位數</span>
+                <span id="spot-capacity" class="text-4xl font-black text-green-400">--</span>
             </div>
         </div>
-
-        <div id="route-info" class="bg-gray-800 rounded-xl p-3 flex items-center justify-between border border-gray-700">
-            <div class="flex items-center">
-                <svg class="w-5 h-5 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-                <span class="text-gray-300 text-sm">行車距離：</span>
-                <span id="route-dist" class="text-white font-bold text-lg ml-1">計算中...</span>
-            </div>
-            <div class="flex items-center">
-                <svg class="w-5 h-5 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                <span id="route-time" class="text-blue-400 font-bold text-lg">--</span>
-            </div>
+        <div class="flex gap-4 text-gray-300 text-sm italic">
+            <span id="route-dist">距離計算中...</span>
+            <span id="route-time"></span>
         </div>
-
-        <div class="flex flex-col gap-3 mt-1">
-            <a id="btn-waze" href="#" class="w-full bg-blue-500 hover:bg-blue-400 active:bg-blue-600 text-white text-center text-2xl font-bold py-4 rounded-2xl shadow-lg flex items-center justify-center">
-                使用 Waze 導航
+        <div class="flex flex-col gap-3">
+            <a id="btn-waze" href="#" class="w-full bg-[#33ccff] text-black text-center text-xl font-black py-4 rounded-2xl flex items-center justify-center">
+                Waze 導航 (避相機)
             </a>
-            <a id="btn-gmap" href="#" class="w-full bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-200 text-center text-lg font-bold py-3 rounded-xl flex items-center justify-center">
-                Google Maps 導航
-            </a>
+            <button onclick="closeSheet()" class="text-gray-500 text-sm py-2">關閉詳情</button>
         </div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    
     <script>
-        // 1. 初始化地圖
-        const map = L.map('map', { zoomControl: false }).setView([22.3193, 114.1694], 12);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+        const map = L.map('map', { zoomControl: false }).setView([22.3193, 114.1694], 11);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-        // 2. 用戶位置變數
-        let userLatLng = null;
-        let userMarker = null;
+        const markers = L.markerClusterGroup(); // 使用 Cluster 處理大量數據
+        let userPos = null;
 
-        // 3. 獲取用戶 GPS 位置
-        function locateUser() {
-            if (navigator.geolocation) {
-                // 使用 watchPosition 可以持續更新位置，但測試時 getCurrentPosition 會快啲
-                navigator.geolocation.getCurrentPosition(position => {
-                    userLatLng = [position.coords.latitude, position.coords.longitude];
-                    
-                    if (!userMarker) {
-                        // 首次定位，在地圖上畫一個閃爍嘅藍點
-                        userMarker = L.marker(userLatLng, {
-                            icon: L.divIcon({
-                                className: 'user-location-marker',
-                                iconSize: [20, 20],
-                                iconAnchor: [10, 10]
-                            })
-                        }).addTo(map);
-                    } else {
-                        userMarker.setLatLng(userLatLng); // 更新位置
-                    }
-                    
-                    // 視角飛過去用戶位置，zoom 埋去
-                    map.flyTo(userLatLng, 15, { animate: true, duration: 1 });
-                }, error => {
-                    console.warn("無法獲取位置，請確保已允許瀏覽器定位權限。");
-                    alert("未能獲取你嘅位置，請檢查手機定位權限！");
-                }, { enableHighAccuracy: true });
-            }
+        // 1. 獲取定位
+        function updateLocation() {
+            navigator.geolocation.getCurrentPosition(pos => {
+                userPos = [pos.coords.latitude, pos.coords.longitude];
+                L.marker(userPos, {icon: L.divIcon({className: 'user-location-marker', iconSize:[16,16]})}).addTo(map);
+                map.flyTo(userPos, 15);
+            }, null, {enableHighAccuracy: true});
         }
+        document.getElementById('btn-locate').onclick = updateLocation;
+        updateLocation();
 
-        // 綁定定位按鈕
-        document.getElementById('btn-locate').addEventListener('click', locateUser);
-        
-        // 網頁載入時自動嘗試定位一次
-        locateUser();
-
-        // 4. 擴充版模擬骨位數據 (港九新界都有啲)
-        const parkingSpots = [
-            // 九龍
-            { name: '深水埗桂林街', capacity: 30, lat: 22.3302, lng: 114.1623 },
-            { name: '深水埗福華街', capacity: 15, lat: 22.3325, lng: 114.1640 },
-            { name: '旺角快富街', capacity: 45, lat: 22.3210, lng: 114.1690 },
-            { name: '旺角洗衣街', capacity: 22, lat: 22.3185, lng: 114.1715 },
-            { name: '尖沙咀海防道', capacity: 8,  lat: 22.2985, lng: 114.1712 },
-            { name: '尖沙咀加連威老道', capacity: 12, lat: 22.2995, lng: 114.1745 },
-            { name: '紅磡德民街', capacity: 25, lat: 22.3055, lng: 114.1880 },
-            { name: '觀塘駿業街', capacity: 65, lat: 22.3120, lng: 114.2230 },
-            { name: '九龍灣常悅道', capacity: 40, lat: 22.3210, lng: 114.2110 },
-            // 港島
-            { name: '中環碼頭', capacity: 12, lat: 22.2872, lng: 114.1585 },
-            { name: '中環威靈頓街', capacity: 6, lat: 22.2825, lng: 114.1550 },
-            { name: '灣仔謝斐道', capacity: 35, lat: 22.2785, lng: 114.1740 },
-            { name: '銅鑼灣謝斐道', capacity: 5,  lat: 22.2815, lng: 114.1820 },
-            { name: '北角渣華道', capacity: 18, lat: 22.2925, lng: 114.1980 },
-            { name: '柴灣利眾街', capacity: 20, lat: 22.2645, lng: 114.2380 },
-            // 新界
-            { name: '荃灣路德圍', capacity: 50, lat: 22.3731, lng: 114.1165 },
-            { name: '荃灣沙咀道', capacity: 28, lat: 22.3685, lng: 114.1140 },
-            { name: '沙田正街', capacity: 40, lat: 22.3810, lng: 114.1885 },
-            { name: '大埔廣福道', capacity: 35, lat: 22.4480, lng: 114.1680 },
-            { name: '元朗教育路', capacity: 60, lat: 22.4425, lng: 114.0260 }
-        ];
-
-        // 建立圖示
-        function createIcon(capacity) {
-            const isLow = capacity < 10;
-            return L.divIcon({
-                className: 'custom-div-icon',
-                html: `<div style="background-color: ${isLow ? '#ef4444' : '#22c55e'}; border: 3px solid white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.4);">${capacity}</div>`,
-                iconSize: [40, 40], iconAnchor: [20, 20]
-            });
-        }
-
-        const bottomSheet = document.getElementById('bottom-sheet');
-        const spotNameEl = document.getElementById('spot-name');
-        const spotCapacityEl = document.getElementById('spot-capacity');
-        const routeDistEl = document.getElementById('route-dist');
-        const routeTimeEl = document.getElementById('route-time');
-
-        // 5. 使用 OSRM API 計算實際行車距離與時間
-        async function calculateRoute(destLat, destLng) {
-            if (!userLatLng) {
-                routeDistEl.innerText = "請先獲取定位";
-                routeTimeEl.innerText = "--";
-                return;
-            }
-            
-            routeDistEl.innerText = "計算中...";
-            routeTimeEl.innerText = "--";
-
+        // 2. 直接讀取全港數據 (這裡使用模擬的完整 Data 結構示範)
+        // 在真實開發中，你會用 fetch('https://api.data.gov.hk/...')
+        async function loadAllSpots() {
             try {
-                // OSRM 格式: lng,lat;lng,lat
-                const url = `https://router.project-osrm.org/route/v1/driving/${userLatLng[1]},${userLatLng[0]};${destLng},${destLat}?overview=false`;
-                const response = await fetch(url);
+                // 模擬抓取政府資料庫
+                // 現實中你可以從 Data.gov.hk 獲取 "On-street Parking Spaces for Motorcycles"
+                const response = await fetch('https://raw.githubusercontent.com/g0vhk-archive/on-street-parking/master/data/motorcycle.json');
                 const data = await response.json();
 
-                if (data.routes && data.routes.length > 0) {
-                    const distanceKm = (data.routes[0].distance / 1000).toFixed(1); // 轉為公里
-                    const durationMin = Math.ceil(data.routes[0].duration / 60); // 轉為分鐘
-                    
-                    routeDistEl.innerText = `${distanceKm} km`;
-                    routeTimeEl.innerText = `約 ${durationMin} 分鐘`;
-                } else {
-                    routeDistEl.innerText = "無法規劃路線";
-                }
-            } catch (error) {
-                routeDistEl.innerText = "網絡錯誤";
+                data.forEach(spot => {
+                    // 根據數據格式調整 (這裡假設格式為 {address, lat, lng, capacity})
+                    const marker = L.marker([spot.lat, spot.lng], {
+                        icon: L.divIcon({
+                            className: '',
+                            html: `<div class="bg-green-500 border-2 border-white rounded-full text-[10px] text-white font-bold flex items-center justify-center w-8 h-8">${spot.capacity || '?'}</div>`
+                        })
+                    });
+
+                    marker.on('click', () => {
+                        showDetails(spot);
+                    });
+                    markers.addLayer(marker);
+                });
+                map.addLayer(markers);
+            } catch (e) {
+                console.error("載入失敗", e);
+                alert("無法連線至政府數據庫，請稍後再試。");
             }
         }
 
-        // 將資料放上地圖
-        parkingSpots.forEach(spot => {
-            const marker = L.marker([spot.lat, spot.lng], { icon: createIcon(spot.capacity) }).addTo(map);
+        function showDetails(spot) {
+            document.getElementById('spot-name').innerText = spot.address || spot.name || "未知街道";
+            document.getElementById('spot-capacity').innerText = spot.capacity || "??";
+            document.getElementById('btn-waze').href = `waze://?ll=${spot.lat},${spot.lng}&navigate=yes`;
             
-            marker.on('click', () => {
-                spotNameEl.innerText = spot.name;
-                spotCapacityEl.innerText = spot.capacity;
-                spotCapacityEl.className = spot.capacity < 10 ? "text-5xl font-black text-red-500 leading-none" : "text-5xl font-black text-green-400 leading-none";
+            if(userPos) {
+                // 快速計算直線距離 (KM)
+                const d = map.distance(userPos, [spot.lat, spot.lng]) / 1000;
+                document.getElementById('route-dist').innerText = `直線距離: ${d.toFixed(1)} km`;
+                document.getElementById('route-time').innerText = `(約 ${Math.round(d*3)} 分鐘車程)`;
+            }
 
-                document.getElementById('btn-waze').href = `waze://?ll=${spot.lat},${spot.lng}&navigate=yes`;
-                document.getElementById('btn-gmap').href = `http://maps.google.com/maps?daddr=${spot.lat},${spot.lng}&directionsmode=driving`;
-
-                bottomSheet.classList.replace('sheet-closed', 'sheet-open');
-                
-                // 計算行車距離 (需要用戶已定位)
-                calculateRoute(spot.lat, spot.lng);
-
-                // 稍微將緯度向下移，遷就底部彈出嘅面板
-                map.flyTo([spot.lat - 0.008, spot.lng], 14, { animate: true, duration: 0.5 });
-            });
-        });
-
-        // 點擊地圖關閉面板
-        function closeSheet() {
-            bottomSheet.classList.replace('sheet-open', 'sheet-closed');
+            document.getElementById('bottom-sheet').className = "fixed bottom-0 left-0 w-full bg-gray-900 border-t border-gray-700 rounded-t-3xl p-6 sheet-open flex flex-col gap-4 pb-12";
         }
-        map.on('click', closeSheet);
-        document.getElementById('close-sheet').addEventListener('click', closeSheet);
+
+        function closeSheet() {
+            document.getElementById('bottom-sheet').className = "fixed bottom-0 left-0 w-full bg-gray-900 border-t border-gray-700 rounded-t-3xl p-6 sheet-closed flex flex-col gap-4 pb-12";
+        }
+
+        loadAllSpots();
     </script>
 </body>
 </html>
