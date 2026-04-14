@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>香港電單車骨位地圖 (Rider 版)</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; background-color: #1a202c; overflow: hidden; font-family: sans-serif; }
+        /* 讓地圖填滿畫面，置於底層 */
+        #map { height: 100vh; width: 100vw; z-index: 1; }
+        
+        /* 隱藏地圖預設的放大縮小按鈕，畫面更乾淨 */
+        .leaflet-control-zoom { display: none; }
+        
+        /* 底部資訊面板動畫與層級設定 */
+        #bottom-sheet { 
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            z-index: 1000; /* 確保蓋過地圖 */
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+        }
+        .sheet-open { transform: translateY(0%); }
+        .sheet-closed { transform: translateY(105%); }
+    </style>
+</head>
+<body class="relative">
+
+    <div id="map"></div>
+
+    <div id="bottom-sheet" class="fixed bottom-0 left-0 w-full bg-gray-900 border-t border-gray-700 rounded-t-3xl p-6 sheet-closed flex flex-col gap-5 pb-10">
+        <div class="w-16 h-1.5 bg-gray-600 rounded-full mx-auto cursor-pointer" id="close-sheet"></div>
+        
+        <div class="flex justify-between items-end mt-2">
+            <div>
+                <h2 id="spot-name" class="text-3xl font-bold text-white mb-1">載入中...</h2>
+                <p class="text-gray-400 text-sm">露天電單車泊車處</p>
+            </div>
+            <div class="text-right">
+                <div class="text-xs text-gray-400 font-bold tracking-widest mb-1">總車位數</div>
+                <div id="spot-capacity" class="text-5xl font-black text-green-400 leading-none">0</div>
+            </div>
+        </div>
+
+        <div class="w-full h-px bg-gray-700 my-1"></div>
+
+        <div class="flex flex-col gap-3">
+            <a id="btn-waze" href="#" class="w-full bg-blue-500 hover:bg-blue-400 active:bg-blue-600 text-white text-center text-2xl font-bold py-5 rounded-2xl shadow-lg flex items-center justify-center transition-colors">
+                <svg class="w-7 h-7 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                </svg>
+                使用 Waze 導航
+            </a>
+
+            <a id="btn-gmap" href="#" class="w-full bg-gray-800 hover:bg-gray-700 border border-gray-600 active:bg-gray-900 text-gray-200 text-center text-lg font-bold py-4 rounded-xl flex items-center justify-center transition-colors">
+                <svg class="w-5 h-5 mr-2 text-gray-400" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"></path>
+                </svg>
+                Google Maps 導航
+            </a>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // 1. 初始化地圖，中心點設定為香港 (緯度, 經度, 預設縮放級別)
+        const map = L.map('map', { zoomControl: false }).setView([22.3193, 114.1694], 12);
+        
+        // 2. 載入暗色系地圖底圖 (CartoDB Dark Matter)，適合戶外強光或夜間駕駛
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // 3. 模擬香港骨位數據 (包含經緯度與車位總數)
+        const parkingSpots = [
+            { id: 1, name: '深水埗桂林街', capacity: 30, lat: 22.3302, lng: 114.1623 },
+            { id: 2, name: '尖沙咀海防道', capacity: 8,  lat: 22.2985, lng: 114.1712 },
+            { id: 3, name: '荃灣路德圍',   capacity: 50, lat: 22.3731, lng: 114.1165 },
+            { id: 4, name: '旺角快富街',   capacity: 45, lat: 22.3210, lng: 114.1690 },
+            { id: 5, name: '中環碼頭',     capacity: 12, lat: 22.2872, lng: 114.1585 },
+            { id: 6, name: '銅鑼灣謝斐道', capacity: 5,  lat: 22.2815, lng: 114.1820 },
+            { id: 7, name: '觀塘駿業街',   capacity: 65, lat: 22.3120, lng: 114.2230 }
+        ];
+
+        // 取得 UI 元素
+        const bottomSheet = document.getElementById('bottom-sheet');
+        const spotNameEl = document.getElementById('spot-name');
+        const spotCapacityEl = document.getElementById('spot-capacity');
+        const btnWaze = document.getElementById('btn-waze');
+        const btnGmap = document.getElementById('btn-gmap');
+        const closeSheetBtn = document.getElementById('close-sheet');
+
+        // 4. 動態產生標記圖示 (車位少於 10 個轉做紅色警告)
+        function createIcon(capacity) {
+            const isLow = capacity < 10;
+            const bgColor = isLow ? '#ef4444' : '#22c55e'; // 紅色或綠色
+            const shadow = isLow ? '0 0 15px rgba(239, 68, 68, 0.6)' : '0 4px 6px rgba(0,0,0,0.3)';
+            
+            return L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div style="background-color: ${bgColor}; border: 3px solid white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 16px; box-shadow: ${shadow};">${capacity}</div>`,
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
+            });
+        }
+
+        // 5. 將骨位資料加入地圖並設定點擊事件
+        parkingSpots.forEach(spot => {
+            const marker = L.marker([spot.lat, spot.lng], { icon: createIcon(spot.capacity) }).addTo(map);
+            
+            marker.on('click', () => {
+                // 更新面板文字
+                spotNameEl.innerText = spot.name;
+                spotCapacityEl.innerText = spot.capacity;
+                
+                // 車位極少時，數字變為紅色
+                if (spot.capacity < 10) {
+                    spotCapacityEl.className = "text-5xl font-black text-red-500 leading-none";
+                } else {
+                    spotCapacityEl.className = "text-5xl font-black text-green-400 leading-none";
+                }
+
+                // 設定 Waze Deep Link (使用 waze:// URL Scheme)
+                btnWaze.href = `waze://?ll=${spot.lat},${spot.lng}&navigate=yes`;
+                
+                // 設定 Google Maps 網頁/App 導航連結
+                btnGmap.href = `https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}&travelmode=driving`;
+
+                // 彈出底部面板
+                bottomSheet.classList.remove('sheet-closed');
+                bottomSheet.classList.add('sheet-open');
+                
+                // 將地圖中心點平移到骨位位置 (稍微將緯度向下移，以免被彈出的面板遮擋)
+                map.flyTo([spot.lat - 0.008, spot.lng], 15, { animate: true, duration: 0.5 });
+            });
+        });
+
+        // 6. 關閉面板的互動處理
+        function closeSheet() {
+            bottomSheet.classList.remove('sheet-open');
+            bottomSheet.classList.add('sheet-closed');
+        }
+
+        map.on('click', closeSheet);       // 點擊地圖空白處關閉
+        closeSheetBtn.addEventListener('click', closeSheet); // 點擊面板頂部橫條關閉
+    </script>
+</body>
+</html>
