@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>香港骨位地圖 (型格黑魂修復版)</title>
+    <title>香港全港骨位地圖 (V17 穩定版)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
@@ -12,9 +12,10 @@
     
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background-color: #000; overflow: hidden; }
-        #map { height: 100vh; width: 100vw; z-index: 1; background: #000; }
+        #map { height: 100vh; width: 100vw; z-index: 1; background: #1a1a1a; }
         .leaflet-control-zoom { display: none; }
         
+        /* 黑魂玻璃介面 */
         #bottom-sheet { 
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
             z-index: 1000; 
@@ -26,30 +27,14 @@
         .sheet-open { transform: translateY(0%); }
         .sheet-closed { transform: translateY(105%); }
         
-        .user-location-marker { 
-            background: #00ffcc; 
-            border: 2px solid #fff; 
-            border-radius: 50%; 
-            box-shadow: 0 0 15px #00ffcc; 
-        }
-        /* 叢集圖示樣式 */
-        .custom-cluster {
-            background: rgba(0, 255, 204, 0.1);
-            border: 2px solid #00ffcc;
-            color: #00ffcc;
-            font-weight: bold;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+        .user-location-marker { background: #00ffcc; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 15px #00ffcc; }
     </style>
 </head>
 <body>
 
     <div id="status-badge" class="absolute top-6 left-4 z-[1001] bg-black/80 border border-[#00ffcc]/30 text-[#00ffcc] text-xs px-4 py-2 rounded-full flex items-center gap-2">
         <div id="status-dot" class="w-2 h-2 rounded-full bg-[#00ffcc] animate-pulse"></div>
-        <span id="status-text">連接政府數據庫中...</span>
+        <span id="status-text">正在連接全港數據庫...</span>
     </div>
 
     <div id="map"></div>
@@ -63,10 +48,10 @@
         
         <div class="flex justify-between items-start">
             <div class="w-2/3">
-                <h2 id="spot-name" class="text-xl font-bold text-white leading-tight">請選擇位置</h2>
+                <h2 id="spot-name" class="text-xl font-bold text-white leading-tight">載入中...</h2>
                 <div class="flex gap-2 text-[#00ffcc] font-bold text-xs mt-2">
-                    <span id="route-dist" class="bg-[#00ffcc]/10 px-2 py-1 rounded border border-[#00ffcc]/20">-- km</span>
-                    <span id="route-time" class="bg-[#00ffcc]/10 px-2 py-1 rounded border border-[#00ffcc]/20">-- mins</span>
+                    <span id="route-dist" class="bg-[#00ffcc]/10 px-2 py-1 rounded">-- km</span>
+                    <span id="route-time" class="bg-[#00ffcc]/10 px-2 py-1 rounded">-- mins</span>
                 </div>
             </div>
             <div class="text-right">
@@ -76,8 +61,8 @@
         </div>
         
         <div class="flex gap-3 mt-3">
-            <a id="btn-waze" href="#" class="flex-grow bg-[#00ffcc] text-black text-center text-lg font-bold py-4 rounded-2xl active:scale-95 transition-transform">Waze 導航 (避相機)</a>
-            <a id="btn-streetview" href="#" target="_blank" class="w-20 bg-gray-800 text-white text-center text-sm font-bold py-4 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-transform"><span class="text-xl">👁️</span></a>
+            <a id="btn-waze" href="#" class="flex-grow bg-[#00ffcc] text-black text-center text-lg font-bold py-4 rounded-2xl active:scale-95 transition-transform shadow-[0_0_15px_rgba(0,255,204,0.3)]">Waze 導航 (避相機)</a>
+            <a id="btn-streetview" href="#" target="_blank" class="w-20 bg-gray-800 border border-gray-700 text-white text-center text-sm font-bold py-4 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-transform"><span class="text-xl">👁️</span></a>
         </div>
     </div>
 
@@ -85,17 +70,15 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     
     <script>
-        // 1. 初始化地圖 (使用 Dark Matter 黑色底圖)
+        // 1. 初始化地圖
         const map = L.map('map', { zoomControl: false }).setView([22.3193, 114.1694], 11);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '© CartoDB'
-        }).addTo(map);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
         const markers = L.markerClusterGroup({
             disableClusteringAtZoom: 16,
             iconCreateFunction: function(cluster) {
                 return L.divIcon({
-                    html: `<div class="custom-cluster" style="width:40px;height:40px;">${cluster.getChildCount()}</div>`,
+                    html: `<div style="background-color:rgba(17,24,39,0.95); border: 2px solid #00ffcc; color: #00ffcc; font-weight: bold; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0,255,204,0.5);">${cluster.getChildCount()}</div>`,
                     className: '', iconSize: [40, 40]
                 });
             }
@@ -103,7 +86,7 @@
         
         let userPos = null;
 
-        // 2. 定位功能 [cite: 13, 14]
+        // 2. 定位功能
         function updateLocation() {
             if(navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
@@ -116,41 +99,41 @@
         document.getElementById('btn-locate').onclick = updateLocation;
         updateLocation();
 
-        // 3. 緊急備用數據 (確保斷網時也有畫面)
-        const backupData = [
-            { "address": "旺角西洋菜南街 (備用)", "lat": 22.3194, "lng": 114.1706, "capacity": 12 },
-            { "address": "尖沙咀海防道 (備用)", "lat": 22.2989, "lng": 114.1717, "capacity": 20 },
-            { "address": "灣仔謝斐道 (備用)", "lat": 22.2796, "lng": 114.1746, "capacity": 8 }
-        ];
-
-        // 4. 讀取數據 (修復 Fetch 邏輯) [cite: 15, 16]
+        // 3. 讀取數據 (加入強化的雙重讀取機制)
         async function loadData() {
             const statusText = document.getElementById('status-text');
             const statusDot = document.getElementById('status-dot');
             
-            try {
-                // 改用這個更穩定的開源數據備份
-                const url = 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://raw.githubusercontent.com/g0vhk-archive/on-street-parking/master/data/motorcycle.json');
-                
-                const response = await fetch(url);
-                if (!response.ok) throw new Error("API 無法連線");
-                const data = await response.json();
-                
-                renderMarkers(data);
-                
-                statusText.innerText = "數據更新成功";
-                statusDot.classList.replace('animate-pulse', 'animate-none');
-                setTimeout(() => document.getElementById('status-badge').style.opacity = '0', 3000);
-                
-            } catch (e) {
-                console.warn("API 連線失敗，啟動備用數據...", e);
-                renderMarkers(backupData);
-                statusText.innerText = "使用離線數據模式";
-                statusDot.classList.replace('bg-[#00ffcc]', 'bg-yellow-500');
+            // 嘗試兩個不同的穩定路徑
+            const sources = [
+                'https://cdn.jsdelivr.net/gh/g0vhk-archive/on-street-parking@master/data/motorcycle.json',
+                'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://raw.githubusercontent.com/g0vhk-archive/on-street-parking/master/data/motorcycle.json')
+            ];
+
+            for (let url of sources) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) continue;
+                    const data = await response.json();
+                    
+                    if (data && data.length > 0) {
+                        renderSpots(data);
+                        statusText.innerText = "數據更新完成";
+                        statusDot.classList.replace('animate-pulse', 'animate-none');
+                        setTimeout(() => document.getElementById('status-badge').style.opacity = '0', 3000);
+                        return; // 成功讀取就停止
+                    }
+                } catch (e) {
+                    console.error("嘗試失敗:", url);
+                }
             }
+
+            // 如果全部失敗
+            statusText.innerText = "連線失敗，請檢查網路";
+            statusDot.classList.replace('bg-[#00ffcc]', 'bg-red-500');
         }
 
-        function renderMarkers(data) {
+        function renderSpots(data) {
             markers.clearLayers();
             data.forEach(spot => {
                 const lat = parseFloat(spot.lat);
@@ -166,9 +149,10 @@
                 });
                 
                 m.on('click', () => {
-                    document.getElementById('spot-name').innerText = spot.address || spot.name || "政府骨位";
+                    document.getElementById('spot-name').innerText = spot.address || spot.name || "未知街道";
                     document.getElementById('spot-capacity').innerText = spot.capacity || "??";
                     document.getElementById('btn-waze').href = `waze://?ll=${lat},${lng}&navigate=yes`;
+                    // 修正街景 Link
                     document.getElementById('btn-streetview').href = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
 
                     if(userPos) {
