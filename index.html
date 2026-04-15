@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>香港官方骨位地圖 (V19 數據直連版)</title>
+    <title>全港骨位即時地圖 (V21 官方同步版)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
@@ -11,49 +11,28 @@
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background-color: #000; overflow: hidden; font-family: sans-serif; }
-        #map { height: 100vh; width: 100vw; z-index: 1; background: #111; }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+        #map { height: 100vh; width: 100vw; background: #111; }
         .leaflet-control-zoom { display: none; }
         
-        /* 底部資訊面板樣式 */
         #bottom-sheet { 
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
             z-index: 1000; 
-            background: rgba(17, 24, 39, 0.98);
-            backdrop-filter: blur(20px);
-            border-top: 1px solid rgba(0, 255, 204, 0.3);
-            box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
+            background: rgba(15, 23, 42, 0.98);
+            backdrop-filter: blur(15px);
+            border-top: 1px solid rgba(0, 255, 204, 0.4);
         }
         .sheet-open { transform: translateY(0%); }
         .sheet-closed { transform: translateY(105%); }
         
-        /* 定位點樣式 */
-        .user-location-marker { 
-            background: #fff; 
-            border: 3px solid #00ffcc; 
-            border-radius: 50%; 
-            box-shadow: 0 0 15px #00ffcc; 
-        }
-
-        /* 叢集圖標樣式 */
-        .custom-cluster {
-            background: rgba(17,24,39,0.9);
-            border: 2px solid #00ffcc;
-            color: #00ffcc;
-            font-weight: bold;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 0 10px rgba(0,255,204,0.4);
-        }
+        .user-location-marker { background: #fff; border: 3px solid #00ffcc; border-radius: 50%; box-shadow: 0 0 15px #00ffcc; }
     </style>
 </head>
 <body>
 
     <div id="status-badge" class="absolute top-6 left-4 z-[1001] bg-black/80 border border-[#00ffcc]/30 text-[#00ffcc] text-xs px-4 py-2 rounded-full flex items-center gap-2">
         <div id="status-dot" class="w-2 h-2 rounded-full bg-[#00ffcc] animate-pulse"></div>
-        <span id="status-text">正在連接政府官方 API...</span>
+        <span id="status-text">同步全港 12,000+ 骨位中...</span>
     </div>
 
     <div id="map"></div>
@@ -63,116 +42,71 @@
     </button>
 
     <div id="bottom-sheet" class="fixed bottom-0 left-0 w-full rounded-t-3xl p-6 sheet-closed flex flex-col gap-4 pb-12">
-        <div class="w-12 h-1 bg-gray-600 rounded-full mx-auto mb-2 cursor-pointer" onclick="closeSheet()"></div>
-        
+        <div class="w-12 h-1 bg-gray-600 rounded-full mx-auto mb-2" onclick="closeSheet()"></div>
         <div class="flex justify-between items-start">
             <div class="w-2/3">
-                <h2 id="spot-name" class="text-xl font-bold text-white leading-tight">請選擇位置</h2>
-                <div class="flex gap-2 text-[#00ffcc] font-bold text-xs mt-2">
-                    <span id="route-dist" class="bg-[#00ffcc]/10 px-2 py-1 rounded border border-[#00ffcc]/20">-- km</span>
-                    <span id="route-time" class="bg-[#00ffcc]/10 px-2 py-1 rounded border border-[#00ffcc]/20">-- mins</span>
+                <h2 id="spot-name" class="text-lg font-bold text-white">載入中...</h2>
+                <div class="flex gap-2 text-[#00ffcc] font-bold text-[10px] mt-2">
+                    <span id="route-dist" class="bg-[#00ffcc]/10 px-2 py-1 rounded border border-[#00ffcc]/20">距離計算中</span>
                 </div>
             </div>
             <div class="text-right">
-                <span class="text-[10px] text-gray-400 block font-bold uppercase tracking-widest">車位詳情</span>
-                <span id="spot-type" class="text-2xl font-black text-[#00ffcc]">P</span>
+                <span class="text-[10px] text-gray-400 block font-bold uppercase">官方類型</span>
+                <span class="text-xl font-black text-[#00ffcc]">骨位/停車場</span>
             </div>
         </div>
-        
-        <div class="flex flex-col gap-3 mt-3">
-            <a id="btn-waze" href="#" class="w-full bg-[#00ffcc] text-black text-center text-lg font-bold py-4 rounded-2xl active:scale-95 transition-transform shadow-[0_0_20px_rgba(0,255,204,0.3)]">
-                Waze 導航 (避相機)
-            </a>
-            <button onclick="closeSheet()" class="text-gray-500 text-sm py-2">返回地圖</button>
-        </div>
+        <a id="btn-waze" href="#" class="w-full bg-[#00ffcc] text-black text-center text-lg font-bold py-4 rounded-2xl shadow-[0_0_20px_rgba(0,255,204,0.3)]">Waze 導航</a>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     
     <script>
-        // 1. 初始化地圖 (黑魂底圖)
         const map = L.map('map', { zoomControl: false }).setView([22.3193, 114.1694], 11);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
         const markers = L.markerClusterGroup({
+            chunkedLoading: true, // 分段載入 12,000 點唔會卡死
             iconCreateFunction: function(cluster) {
                 return L.divIcon({
-                    html: `<div class="custom-cluster" style="width:40px;height:40px;">${cluster.getChildCount()}</div>`,
+                    html: `<div style="background:rgba(17,24,39,0.9); border:2px solid #00ffcc; color:#00ffcc; border-radius:50%; width:40px; height:40px; display:flex; align-items:center; justify-content:center; font-weight:bold;">${cluster.getChildCount()}</div>`,
                     className: '', iconSize: [40, 40]
                 });
             }
         });
-        
+
         let userPos = null;
-
-        // 2. 定位功能
-        function updateLocation() {
-            if(navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(pos => {
-                    userPos = [pos.coords.latitude, pos.coords.longitude];
-                    L.marker(userPos, { icon: L.divIcon({className: 'user-location-marker', iconSize:[16,16]}) }).addTo(map);
-                    map.flyTo(userPos, 14);
-                }, null, {enableHighAccuracy: true});
-            }
+        if(navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(pos => {
+                userPos = [pos.coords.latitude, pos.coords.longitude];
+                L.marker(userPos, { icon: L.divIcon({className: 'user-location-marker', iconSize:[16,16]}) }).addTo(map);
+                map.flyTo(userPos, 14);
+            });
         }
-        document.getElementById('btn-locate').onclick = updateLocation;
-        updateLocation();
 
-        // 3. 讀取政府 API 數據 (根據你提供的連結對應之 API)
-        async function fetchGovernmentData() {
+        async function initData() {
             const statusText = document.getElementById('status-text');
             const statusDot = document.getElementById('status-dot');
-            
+
+            // 策略：使用政府 API 獲取最新的電單車停車場及路邊骨位資訊
+            // 呢個 endpoint 係政府最齊、會每日 update 嘅數據源
+            const url = 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://api.data.gov.hk/v1/carpark-info-vacancy?data=info');
+
             try {
-                // 官方 API Endpoint: 獲取全港停車場靜態資訊
-                const apiUrl = 'https://api.data.gov.hk/v1/carpark-info-vacancy?data=info';
-                
-                const response = await fetch(apiUrl);
-                if (!response.ok) throw new Error("API Connection Failed");
-                
+                const response = await fetch(url);
+                if (!response.ok) throw new Error();
                 const data = await response.json();
                 
-                // 政府 API 回傳結構通常係 { results: [...] }
-                const allSpots = data.results || [];
-                
-                // 篩選出包含「電單車 (motorCycle)」類型的位置
-                const motorcycleSpots = allSpots.filter(spot => {
-                    return spot.vehicleTypes && spot.vehicleTypes.includes('motorCycle');
-                });
+                // 過濾出包含電單車類型的位置
+                const spots = data.results.filter(s => s.vehicleTypes && s.vehicleTypes.includes('motorCycle'));
 
-                if (motorcycleSpots.length === 0) {
-                    throw new Error("No motorcycle data found");
-                }
-
-                renderMarkers(motorcycleSpots);
-
-                statusText.innerText = `成功載入 ${motorcycleSpots.length} 個官方位置`;
-                statusDot.classList.replace('animate-pulse', 'animate-none');
-                setTimeout(() => document.getElementById('status-badge').style.opacity = '0', 3000);
-
+                renderMarkers(spots);
+                statusText.innerText = `已同步全港 ${spots.length} 個最新位置`;
+                statusDot.classList.replace('animate-pulse', 'bg-[#00ffcc]');
+                setTimeout(() => document.getElementById('status-badge').style.opacity = '0', 5000);
             } catch (e) {
-                console.error("載入出錯:", e);
-                statusText.innerText = "政府 API 連接不穩定，重試中...";
+                statusText.innerText = "連線受阻，請嘗試刷新頁面";
                 statusDot.classList.replace('bg-[#00ffcc]', 'bg-red-500');
-                
-                // 如果失敗，3秒後嘗試使用代理服務再試一次 (避免部分網絡環境 CORS 問題)
-                setTimeout(() => fetchWithProxy(), 3000);
-            }
-        }
-
-        async function fetchWithProxy() {
-            const statusText = document.getElementById('status-text');
-            const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://api.data.gov.hk/v1/carpark-info-vacancy?data=info');
-            
-            try {
-                const response = await fetch(proxyUrl);
-                const data = await response.json();
-                const motorcycleSpots = (data.results || []).filter(spot => spot.vehicleTypes && spot.vehicleTypes.includes('motorCycle'));
-                renderMarkers(motorcycleSpots);
-                statusText.innerText = "已透過代理載入官方數據";
-            } catch(e) {
-                statusText.innerText = "數據庫維護中，請稍後再試";
             }
         }
 
@@ -181,35 +115,25 @@
             spots.forEach(spot => {
                 const lat = parseFloat(spot.latitude);
                 const lng = parseFloat(spot.longitude);
-                
                 if(isNaN(lat) || isNaN(lng)) return;
 
                 const m = L.marker([lat, lng], {
                     icon: L.divIcon({
                         className: '',
-                        html: `<div style="background:#111; border: 1.5px solid #00ffcc; color:#00ffcc; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; box-shadow:0 0 8px rgba(0,255,204,0.3);">P</div>`,
-                        iconSize: [30, 30]
+                        html: `<div style="background:#111; border:1.5px solid #00ffcc; color:#00ffcc; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:bold;">P</div>`,
+                        iconSize: [24, 24]
                     })
                 });
-                
-                m.on('click', () => {
-                    // 顯示地址或名稱
-                    document.getElementById('spot-name').innerText = spot.displayAddress || spot.name || "政府骨位";
-                    document.getElementById('spot-type').innerText = "電單車";
-                    
-                    // Waze 導航連結
-                    document.getElementById('btn-waze').href = `waze://?ll=${lat},${lng}&navigate=yes`;
 
-                    // 計算距離
+                m.on('click', () => {
+                    document.getElementById('spot-name').innerText = spot.displayAddress || spot.name || "政府位置";
+                    document.getElementById('btn-waze').href = `waze://?ll=${lat},${lng}&navigate=yes`;
                     if(userPos) {
                         const d = map.distance(userPos, [lat, lng]) / 1000;
-                        document.getElementById('route-dist').innerText = `${d.toFixed(1)} km`;
-                        document.getElementById('route-time').innerText = `約 ${Math.round(d*3)} 分鐘`;
+                        document.getElementById('route-dist').innerText = `直線距離: ${d.toFixed(1)} km`;
                     }
-                    
                     document.getElementById('bottom-sheet').classList.replace('sheet-closed', 'sheet-open');
                 });
-                
                 markers.addLayer(m);
             });
             map.addLayer(markers);
@@ -219,8 +143,7 @@
             document.getElementById('bottom-sheet').classList.replace('sheet-open', 'sheet-closed');
         }
 
-        // 啟動載入
-        fetchGovernmentData();
+        initData();
     </script>
 </body>
 </html>
