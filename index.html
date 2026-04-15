@@ -3,20 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>香港骨位地圖 (型格黑魂 CDN 終極版)</title>
+    <title>香港骨位地圖 (官方 API 版)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background-color: #000; overflow: hidden; }
         #map { height: 100vh; width: 100vw; z-index: 1; background: #000; }
         .leaflet-control-zoom { display: none; }
         
-        /* 黑魂玻璃介面 */
         #bottom-sheet { 
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
             z-index: 1000; 
@@ -24,7 +22,6 @@
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border-top: 1px solid rgba(255, 255, 255, 0.15);
-            box-shadow: 0 -10px 50px rgba(0,0,0,0.9);
         }
         .sheet-open { transform: translateY(0%); }
         .sheet-closed { transform: translateY(105%); }
@@ -35,14 +32,13 @@
             border-radius: 50%; 
             box-shadow: 0 0 15px #00ffcc; 
         }
-        ::-webkit-scrollbar { display: none; }
     </style>
 </head>
 <body>
 
-    <div id="status-badge" class="absolute top-6 left-4 z-[1001] bg-black/80 border border-[#00ffcc]/30 text-[#00ffcc] text-xs px-4 py-2 rounded-full flex items-center gap-2 shadow-[0_0_15px_rgba(0,255,204,0.2)] transition-opacity duration-500">
+    <div id="status-badge" class="absolute top-6 left-4 z-[1001] bg-black/80 border border-[#00ffcc]/30 text-[#00ffcc] text-xs px-4 py-2 rounded-full flex items-center gap-2 transition-opacity duration-500">
         <div id="status-dot" class="w-2 h-2 rounded-full bg-[#00ffcc] animate-pulse"></div>
-        <span id="status-text" class="font-bold tracking-wide">初始化地圖引擎...</span>
+        <span id="status-text" class="font-bold tracking-wide">連接政府數據庫中...</span>
     </div>
 
     <div id="map"></div>
@@ -64,17 +60,13 @@
             </div>
             <div class="text-right">
                 <span class="text-[10px] text-gray-400 block font-bold uppercase tracking-widest">提供車位</span>
-                <span id="spot-capacity" class="text-4xl font-black text-[#00ffcc] drop-shadow-[0_0_10px_rgba(0,255,204,0.4)]">--</span>
+                <span id="spot-capacity" class="text-4xl font-black text-[#00ffcc]">--</span>
             </div>
         </div>
         
         <div class="flex gap-3 mt-3">
-            <a id="btn-waze" href="#" class="flex-grow bg-[#00ffcc] text-black text-center text-lg font-bold py-4 rounded-2xl active:scale-95 transition-transform shadow-[0_0_15px_rgba(0,255,204,0.3)]">
-                Waze 導航起行
-            </a>
-            <a id="btn-streetview" href="#" target="_blank" class="w-20 bg-gray-800 border border-gray-700 text-white text-center text-sm font-bold py-4 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-transform">
-                <span class="text-xl">👁️</span>
-            </a>
+            <a id="btn-waze" href="#" class="flex-grow bg-[#00ffcc] text-black text-center text-lg font-bold py-4 rounded-2xl active:scale-95 transition-transform">Waze 導航起行</a>
+            <a id="btn-streetview" href="#" target="_blank" class="w-20 bg-gray-800 border border-gray-700 text-white text-center text-sm font-bold py-4 rounded-2xl flex flex-col items-center justify-center active:scale-95 transition-transform"><span class="text-xl">👁️</span></a>
         </div>
     </div>
 
@@ -82,140 +74,107 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     
     <script>
-        // 1. 初始化黑魂地圖
-        const map = L.map('map', { zoomControl: false, fadeAnimation: true }).setView([22.3193, 114.1694], 11);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
+        const map = L.map('map', { zoomControl: false }).setView([22.3193, 114.1694], 11);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
         const markers = L.markerClusterGroup({
             disableClusteringAtZoom: 16,
-            maxClusterRadius: 40,
             iconCreateFunction: function(cluster) {
-                const count = cluster.getChildCount();
                 return L.divIcon({
-                    html: `<div style="background-color:rgba(17,24,39,0.95); border: 2px solid #00ffcc; color: #00ffcc; font-weight: bold; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px rgba(0,255,204,0.4);">${count}</div>`,
+                    html: `<div style="background-color:rgba(17,24,39,0.95); border: 2px solid #00ffcc; color: #00ffcc; font-weight: bold; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;">${cluster.getChildCount()}</div>`,
                     className: '', iconSize: [38, 38]
                 });
             }
         });
         
         let userPos = null;
-        const CACHE_KEY = 'hk_parking_data_v14_cdn';
 
-        // 2. 定位功能
         function updateLocation() {
             if(navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
                     userPos = [pos.coords.latitude, pos.coords.longitude];
-                    L.marker(userPos, {
-                        icon: L.divIcon({className: 'user-location-marker', iconSize:[16,16]})
-                    }).addTo(map);
-                    map.flyTo(userPos, 14, {duration: 1.5});
-                }, () => console.log('定位權限未開啟'), {enableHighAccuracy: true});
+                    L.marker(userPos, { icon: L.divIcon({className: 'user-location-marker', iconSize:[16,16]}) }).addTo(map);
+                    map.flyTo(userPos, 14);
+                });
             }
         }
         document.getElementById('btn-locate').onclick = updateLocation;
         updateLocation();
 
-        // 3. 渲染骨位標記
-        function renderSpots(data) {
-            markers.clearLayers();
-            data.forEach(spot => {
-                const m = L.marker([spot.lat, spot.lng], {
-                    icon: L.divIcon({
-                        className: '',
-                        html: `<div style="background:#111; border: 1.5px solid #00ffcc; color:#00ffcc; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; box-shadow:0 0 8px rgba(0,255,204,0.3);">${spot.capacity}</div>`,
-                        iconSize: [30, 30]
-                    })
-                });
-                m.on('click', () => showDetails(spot));
-                markers.addLayer(m);
-            });
-            map.addLayer(markers);
-        }
-
-        // 4. 透過 jsDelivr CDN 讀取數據 (無阻擋、極速)
-        function loadData() {
-            const statusBadge = document.getElementById('status-badge');
+        // 使用標準 Fetch 讀取政府 API
+        async function loadData() {
             const statusText = document.getElementById('status-text');
             const statusDot = document.getElementById('status-dot');
             
-            // 先讀取上次緩存，確保地圖一秒有畫面
-            const cached = localStorage.getItem(CACHE_KEY);
-            if(cached) {
-                renderSpots(JSON.parse(cached));
-                statusText.innerText = "同步最新路面數據中...";
+            try {
+                // 如果你原本 V11 係用其他 Link，請喺度修改：
+                const url = 'https://api.data.gov.hk/v1/carpark-info-vacancy?data=info&vehicleTypes=motorCycle';
+                
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("網絡錯誤");
+                const data = await response.json();
+                
+                // 解析政府 JSON 結構
+                const spots = data.results || [];
+                markers.clearLayers();
+                
+                spots.forEach(spot => {
+                    // 政府 API 的經緯度
+                    const lat = parseFloat(spot.latitude);
+                    const lng = parseFloat(spot.longitude);
+                    
+                    if(isNaN(lat) || isNaN(lng)) return;
+
+                    const m = L.marker([lat, lng], {
+                        icon: L.divIcon({
+                            className: '',
+                            html: `<div style="background:#111; border: 1.5px solid #00ffcc; color:#00ffcc; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900;">P</div>`,
+                            iconSize: [30, 30]
+                        })
+                    });
+                    
+                    m.on('click', () => {
+                        // 處理街名，政府 API 有時英文有時中文，優先取顯示地址
+                        let address = spot.displayAddress || spot.name || "政府骨位/停車場";
+                        document.getElementById('spot-name').innerText = address;
+                        
+                        // 嘗試讀取車位數量，如果冇提供就顯示 P
+                        let cap = "P";
+                        if (spot.motorCycle && spot.motorCycle[0] && spot.motorCycle[0].space) {
+                            cap = spot.motorCycle[0].space;
+                        }
+                        document.getElementById('spot-capacity').innerText = cap;
+                        
+                        document.getElementById('btn-waze').href = `waze://?ll=${lat},${lng}&navigate=yes`;
+                        document.getElementById('btn-streetview').href = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${${lat}},${lng}`;
+
+                        if(userPos) {
+                            const d = map.distance(userPos, [lat, lng]) / 1000;
+                            document.getElementById('route-dist').innerText = `${d.toFixed(1)} km`;
+                            document.getElementById('route-time').innerText = `約 ${Math.round(d*3)} 分鐘`;
+                        }
+                        document.getElementById('bottom-sheet').classList.replace('sheet-closed', 'sheet-open');
+                    });
+                    markers.addLayer(m);
+                });
+                
+                map.addLayer(markers);
+                
+                statusText.innerText = "載入成功";
+                statusDot.classList.replace('animate-pulse', 'animate-none');
+                setTimeout(() => document.getElementById('status-badge').style.opacity = '0', 3000);
+                
+            } catch (e) {
+                console.error("載入失敗", e);
+                statusText.innerText = "請檢查網絡連線";
+                statusDot.classList.replace('bg-[#00ffcc]', 'bg-red-500');
             }
-
-            // 利用 jsDelivr 直接解析 GitHub 數據庫，完美避開 CORS 限制
-            const CDN_URL = 'https://cdn.jsdelivr.net/gh/g0vhk-archive/on-street-parking@master/data/motorcycle.csv';
-
-            Papa.parse(CDN_URL, {
-                download: true,
-                header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    const cleanData = results.data.map(row => ({
-                        lat: parseFloat(row.lat || row.Latitude),
-                        lng: parseFloat(row.lng || row.Longitude),
-                        capacity: row.capacity || row.Space_No || "?",
-                        address: row.address || row.Street_Name || "未命名街道"
-                    })).filter(s => !isNaN(s.lat) && !isNaN(s.lng));
-
-                    if(cleanData.length > 0) {
-                        renderSpots(cleanData);
-                        localStorage.setItem(CACHE_KEY, JSON.stringify(cleanData));
-                        
-                        statusText.innerText = "全港骨位更新完成";
-                        statusDot.classList.replace('animate-pulse', 'animate-none');
-                        
-                        // 3秒後淡出隱藏狀態列
-                        setTimeout(() => { 
-                            statusBadge.style.opacity = '0'; 
-                            setTimeout(() => statusBadge.style.display = 'none', 500);
-                        }, 3000);
-                    }
-                },
-                error: function(err) {
-                    console.error("CDN 連線失敗:", err);
-                    if(cached) {
-                        statusText.innerText = "使用離線數據";
-                        statusDot.classList.replace('bg-[#00ffcc]', 'bg-yellow-500');
-                    } else {
-                        statusText.innerText = "請檢查網絡連線";
-                        statusDot.classList.replace('bg-[#00ffcc]', 'bg-red-500');
-                    }
-                }
-            });
         }
 
-        // 5. 點擊骨位彈出詳情
-        function showDetails(spot) {
-            document.getElementById('spot-name').innerText = spot.address;
-            document.getElementById('spot-capacity').innerText = spot.capacity;
-            
-            // Waze 導航連結
-            document.getElementById('btn-waze').href = `waze://?ll=${spot.lat},${spot.lng}&navigate=yes`;
-            
-            // Google 街景座標連結
-            document.getElementById('btn-streetview').href = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${spot.lat},${spot.lng}`;
-
-            // 即時計算距離
-            if(userPos) {
-                const d = map.distance(userPos, [spot.lat, spot.lng]) / 1000;
-                document.getElementById('route-dist').innerText = `${d.toFixed(1)} km`;
-                document.getElementById('route-time').innerText = `約 ${Math.round(d*3)} 分鐘`;
-            }
-            document.getElementById('bottom-sheet').classList.replace('sheet-closed', 'sheet-open');
-        }
-
-        // 隱藏面板
         function closeSheet() {
             document.getElementById('bottom-sheet').classList.replace('sheet-open', 'sheet-closed');
         }
 
-        // 啟動
         loadData();
     </script>
 </body>
