@@ -2,148 +2,314 @@
 <html lang="zh-HK">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>全港骨位即時地圖 (V21 官方同步版)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全能旅行 Planner</title>
     
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <!-- PWA Manifest 連結 (需另外建立 manifest.json) -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3b82f6">
+
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Google Fonts for Pixel Art Theme -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+HK:wght@400;700&display=swap" rel="stylesheet">
+
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
-        #map { height: 100vh; width: 100vw; background: #111; }
-        .leaflet-control-zoom { display: none; }
+        /* 基礎樣式 (現代主題) */
+        :root { --bg-color: #f9fafb; --text-color: #1f2937; --font-main: 'Noto Sans HK', sans-serif; }
+        body { font-family: var(--font-main); background-color: var(--bg-color); color: var(--text-color); transition: all 0.3s; }
         
-        #bottom-sheet { 
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
-            z-index: 1000; 
-            background: rgba(15, 23, 42, 0.98);
-            backdrop-filter: blur(15px);
-            border-top: 1px solid rgba(0, 255, 204, 0.4);
+        .timeline-container { border-left: 2px solid #e5e7eb; margin-left: 1rem; padding-left: 1.5rem; position: relative; }
+        .timeline-dot { position: absolute; left: -0.4rem; top: 1.5rem; width: 14px; height: 14px; border-radius: 50%; background-color: #3b82f6; border: 2px solid white; z-index: 2; transition: all 0.3s;}
+        .transport-line { border-left: 2px dashed #9ca3af; margin-left: -1.4rem; padding-left: 2.4rem; padding-top: 0.5rem; padding-bottom: 0.5rem; color: #6b7280; font-size: 0.875rem; }
+        #map { height: 60vh; border-radius: 0.5rem; z-index: 1; }
+        .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: bold; }
+
+        /* 復古像素主題 (Game Boy Style) - 取代 Dark Mode */
+        body.theme-retro { 
+            --bg-color: #e0f8d0; 
+            --text-color: #0f380f; 
+            --font-main: 'Press Start 2P', 'Noto Sans HK', monospace; 
         }
-        .sheet-open { transform: translateY(0%); }
-        .sheet-closed { transform: translateY(105%); }
+        .theme-retro .bg-white { background-color: #c8e0b0 !important; border: 2px solid #0f380f !important; box-shadow: 4px 4px 0px #0f380f; border-radius: 0; }
+        .theme-retro .bg-blue-600 { background-color: #0f380f !important; color: #e0f8d0 !important; }
+        .theme-retro .text-gray-800, .theme-retro .text-gray-700, .theme-retro .text-gray-600 { color: #0f380f !important; }
+        .theme-retro .timeline-container { border-left: 4px solid #0f380f; }
+        .theme-retro .transport-line { border-left: 4px dashed #0f380f; font-family: 'Noto Sans HK', sans-serif; /* 交通保留易讀字體 */ }
         
-        .user-location-marker { background: #fff; border: 3px solid #00ffcc; border-radius: 50%; box-shadow: 0 0 15px #00ffcc; }
+        /* 虛擬導遊：8-bit 灰貓 Sprite */
+        .cat-guide { display: none; position: absolute; left: -1.2rem; top: 1.2rem; font-size: 1.5rem; z-index: 10; animation: bounce 1s infinite alternate; }
+        .theme-retro .cat-guide { display: block; }
+        .theme-retro .timeline-dot { display: none; } /* 隱藏原本圓點，用灰貓代替 */
+
+        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-5px); } }
     </style>
 </head>
 <body>
 
-    <div id="status-badge" class="absolute top-6 left-4 z-[1001] bg-black/80 border border-[#00ffcc]/30 text-[#00ffcc] text-xs px-4 py-2 rounded-full flex items-center gap-2">
-        <div id="status-dot" class="w-2 h-2 rounded-full bg-[#00ffcc] animate-pulse"></div>
-        <span id="status-text">同步全港 12,000+ 骨位中...</span>
-    </div>
-
-    <div id="map"></div>
-
-    <button id="btn-locate" class="absolute bottom-28 right-6 z-[1001] bg-gray-900 border border-[#00ffcc]/50 text-white p-4 rounded-full shadow-2xl active:scale-90 transition-transform">
-        <svg class="w-6 h-6 text-[#00ffcc]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21c4.418 0 8-3.582 8-8s-3.582-8-8-8-8 3.582-8 8 3.582 8 8 8z"/></svg>
-    </button>
-
-    <div id="bottom-sheet" class="fixed bottom-0 left-0 w-full rounded-t-3xl p-6 sheet-closed flex flex-col gap-4 pb-12">
-        <div class="w-12 h-1 bg-gray-600 rounded-full mx-auto mb-2" onclick="closeSheet()"></div>
-        <div class="flex justify-between items-start">
-            <div class="w-2/3">
-                <h2 id="spot-name" class="text-lg font-bold text-white">載入中...</h2>
-                <div class="flex gap-2 text-[#00ffcc] font-bold text-[10px] mt-2">
-                    <span id="route-dist" class="bg-[#00ffcc]/10 px-2 py-1 rounded border border-[#00ffcc]/20">距離計算中</span>
-                </div>
-            </div>
-            <div class="text-right">
-                <span class="text-[10px] text-gray-400 block font-bold uppercase">官方類型</span>
-                <span class="text-xl font-black text-[#00ffcc]">骨位/停車場</span>
-            </div>
+<div class="max-w-md mx-auto bg-white min-h-screen shadow-lg relative app-container" id="app-container">
+    <!-- Header with Tools -->
+    <header class="bg-blue-600 text-white p-4 sticky top-0 z-20 shadow-md flex justify-between items-center">
+        <h1 class="text-lg font-bold">✈️ 東京三日遊</h1>
+        <div class="flex gap-2">
+            <button onclick="toggleTheme()" class="bg-white/20 hover:bg-white/30 p-2 rounded text-sm" title="切換主題">🎮</button>
+            <button onclick="exportCSV()" class="bg-white/20 hover:bg-white/30 p-2 rounded text-sm" title="匯出 CSV">📥</button>
         </div>
-        <a id="btn-waze" href="#" class="w-full bg-[#00ffcc] text-black text-center text-lg font-bold py-4 rounded-2xl shadow-[0_0_20px_rgba(0,255,204,0.3)]">Waze 導航</a>
+    </header>
+
+    <!-- Tabs -->
+    <div class="flex border-b text-center bg-white sticky top-[60px] z-10 tab-container">
+        <button id="tab-timeline" class="flex-1 py-3 tab-active transition" onclick="switchTab('timeline')">📍 路線</button>
+        <button id="tab-map" class="flex-1 py-3 text-gray-500 transition" onclick="switchTab('map')">🗺️ 地圖</button>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
-    
-    <script>
-        const map = L.map('map', { zoomControl: false }).setView([22.3193, 114.1694], 11);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+    <!-- Content: Timeline -->
+    <div id="view-timeline" class="p-4">
+        <div id="itinerary-list"></div>
+        <button class="w-full mt-6 bg-blue-50 text-blue-600 border border-blue-200 py-3 rounded-lg font-bold hover:bg-blue-100 transition btn-add">
+            + 新增行程
+        </button>
+    </div>
 
-        const markers = L.markerClusterGroup({
-            chunkedLoading: true, // 分段載入 12,000 點唔會卡死
-            iconCreateFunction: function(cluster) {
-                return L.divIcon({
-                    html: `<div style="background:rgba(17,24,39,0.9); border:2px solid #00ffcc; color:#00ffcc; border-radius:50%; width:40px; height:40px; display:flex; align-items:center; justify-content:center; font-weight:bold;">${cluster.getChildCount()}</div>`,
-                    className: '', iconSize: [40, 40]
-                });
+    <!-- Content: Map -->
+    <div id="view-map" class="p-4 hidden">
+        <div id="map" class="shadow-inner border border-gray-200"></div>
+    </div>
+</div>
+
+<script>
+    // 資料來源
+    const itineraryData = [
+        { id: 1, time: "09:00", title: "淺草寺 雷門", remarks: "必食人形燒！", transport: { mode: "🚇 銀座線", duration: "15 分鐘" }, lat: 35.7147, lng: 139.7966 },
+        { id: 2, time: "10:30", title: "晴空塔", remarks: "已預訂 11:00 門票。", transport: { mode: "🚶‍♂️ 步行", duration: "20 分鐘" }, lat: 35.7100, lng: 139.8107 },
+        { id: 3, time: "13:00", title: "燒肉午餐", remarks: "午市套餐性價比高。", transport: { mode: "🚃 半藏門線", duration: "40 分鐘" }, lat: 35.7105, lng: 139.8120 },
+        { id: 4, time: "15:00", title: "秋葉原", remarks: "買 Game、行中古店。", transport: null, lat: 35.6983, lng: 139.7731 }
+    ];
+
+    let map, markers = [];
+
+    // 1. 渲染時間線 (加入虛擬灰貓導遊)
+    function renderTimeline() {
+        const container = document.getElementById('itinerary-list');
+        container.innerHTML = '';
+        itineraryData.forEach((item, index) => {
+            const isLast = index === itineraryData.length - 1;
+            let html = `
+                <div class="timeline-container pb-2">
+                    <div class="timeline-dot"></div>
+                    <!-- 虛擬導遊：像素灰貓 🐱 -->
+                    <div class="cat-guide">🐈‍⬛</div>
+                    
+                    <div class="bg-white border border-gray-100 shadow-sm rounded-xl p-4 mt-2 mb-2 card-item">
+                        <h3 class="text-lg font-bold text-gray-800">${item.time} - ${item.title}</h3>
+                        <div class="bg-yellow-50 p-2 mt-2 rounded border border-yellow-10收到！為咗確保功能完整過渡，**原有嘅時間線、地圖預覽、交通同攻略備註已經全部保留（絕對冇刪減任何原有功能）**。
+
+我喺原有基礎上加入咗以下功能：
+1. **一鍵匯出 CSV**（方便 Backup 或 share 俾朋友）。
+2. **像素風主題切換 & 虛擬導遊**（特登避開咗一般嘅 Dark Mode，改為加入一個 8-bit 風格嘅「灰貓導遊」，切換主題時會有復古 Game Boy UI 嘅感覺）。
+3. **PWA 離線支援準備**（加入咗 Service Worker 註冊碼）。
+
+### 更新版完整 HTML 代碼 (`index.html`)
+
+```html
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>簡潔旅行 Planner</title>
+    <!-- Tailwind CSS -->
+    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="[https://unpkg.com/leaflet@1.9.4/dist/leaflet.css](https://unpkg.com/leaflet@1.9.4/dist/leaflet.css)"/>
+    <script src="[https://unpkg.com/leaflet@1.9.4/dist/leaflet.js](https://unpkg.com/leaflet@1.9.4/dist/leaflet.js)"></script>
+    <!-- Google Fonts for Pixel Theme -->
+    <link href="[https://fonts.googleapis.com/css2?family=DotGothic16&display=swap](https://fonts.googleapis.com/css2?family=DotGothic16&display=swap)" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9fafb; transition: all 0.3s; }
+        .timeline-container { border-left: 2px solid #e5e7eb; margin-left: 1rem; padding-left: 1.5rem; position: relative; }
+        .timeline-dot { position: absolute; left: -0.4rem; top: 1.5rem; width: 12px; height: 12px; border-radius: 50%; background-color: #3b82f6; border: 2px solid white; }
+        .transport-line { border-left: 2px dashed #9ca3af; margin-left: -1.4rem; padding-left: 2.4rem; padding-top: 0.5rem; padding-bottom: 0.5rem; color: #6b7280; font-size: 0.875rem; }
+        #map { height: 60vh; border-radius: 0.5rem; z-index: 1; }
+        .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: bold; }
+
+        /* 8-bit 像素風主題 (替代傳統 Dark Mode) */
+        body.pixel-theme { font-family: 'DotGothic16', sans-serif; background-color: #e0f8d0; color: #081820; }
+        .pixel-theme .bg-white { background-color: #88c070 !important; border: 4px solid #346856; border-radius: 0; box-shadow: 4px 4px 0px #081820; }
+        .pixel-theme .bg-blue-600 { background-color: #346856 !important; border-bottom: 4px solid #081820; }
+        .pixel-theme .text-gray-800, .pixel-theme .text-gray-700, .pixel-theme .text-gray-500, .pixel-theme .text-gray-600 { color: #081820 !important; }
+        .pixel-theme .bg-yellow-50 { background-color: #e0f8d0 !important; border: 2px dashed #346856; }
+        .pixel-theme .timeline-dot { background-color: #e0f8d0; border: 2px solid #081820; border-radius: 0; }
+        .pixel-theme .transport-line { border-left: 2px dashed #081820; }
+        
+        /* 灰貓導遊 UI */
+        #cat-guide { position: fixed; bottom: 20px; right: 20px; background: white; padding: 10px; border: 3px solid #3b82f6; border-radius: 12px; display: none; z-index: 50; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .pixel-theme #cat-guide { display: flex; align-items: center; gap: 10px; background: #e0f8d0; border: 4px solid #081820; border-radius: 0; box-shadow: 4px 4px 0px #081820; }
+        .cat-sprite { font-size: 2rem; image-rendering: pixelated; }
+    </style>
+</head>
+<body class="text-gray-800">
+
+<div class="max-w-md mx-auto bg-white min-h-screen shadow-lg relative pb-20">
+    <!-- Header -->
+    <header class="bg-blue-600 text-white p-4 sticky top-0 z-20 shadow-md flex justify-between items-center">
+        <h1 class="text-xl font-bold">✈️ 東京 Planner</h1>
+        <div class="flex gap-2">
+            <button onclick="exportCSV()" class="bg-white/20 hover:bg-white/30 p-2 rounded text-sm transition">📥 CSV</button>
+            <button onclick="toggleTheme()" class="bg-white/20 hover:bg-white/30 p-2 rounded text-sm transition">👾 8-Bit</button>
+        </div>
+    </header>
+
+    <!-- Tabs -->
+    <div class="flex border-b text-center bg-white sticky top-[68px] z-10">
+        <button id="tab-timeline" class="flex-1 py-3 tab-active transition" onclick="switchTab('timeline')">📍 時間線</button>
+        <button id="tab-map" class="flex-1 py-3 text-gray-500 transition" onclick="switchTab('map')">🗺️ 地圖</button>
+    </div>
+
+    <!-- Content: Timeline -->
+    <div id="view-timeline" class="p-4">
+        <div id="itinerary-list"></div>
+        <button class="w-full mt-6 bg-blue-50 text-blue-600 border border-blue-200 py-3 rounded-lg font-medium hover:bg-blue-100 transition" style="border-radius: var(--btn-radius, 0.5rem);">
+            + 新增行程
+        </button>
+    </div>
+
+    <!-- Content: Map -->
+    <div id="view-map" class="p-4 hidden">
+        <div id="map" class="shadow-inner border border-gray-200"></div>
+    </div>
+    
+    <!-- 8-Bit 灰貓導遊 -->
+    <div id="cat-guide">
+        <div class="cat-sprite">🐱</div>
+        <div class="text-sm font-bold" id="cat-message">喵！準備出發去淺草寺！</div>
+    </div>
+</div>
+
+<script>
+    const itineraryData = [
+        { id: 1, time: "09:00", title: "淺草寺 雷門", remarks: "提早去避開人潮。必食仲見世通嘅人形燒！記得買御守。", transport: { mode: "🚇 銀座線", duration: "約 15 分鐘" }, lat: 35.7147, lng: 139.7966 },
+        { id: 2, time: "10:30", title: "晴空塔 (Skytree)", remarks: "已預訂 11:00 觀景台門票。", transport: { mode: "🚶‍♂️ 步行", duration: "約 20 分鐘" }, lat: 35.7100, lng: 139.8107 },
+        { id: 3, time: "13:00", title: "敘敘苑 燒肉 (押上店)", remarks: "午市套餐性價比最高。", transport: { mode: "🚃 轉乘山手線", duration: "約 40 分鐘" }, lat: 35.7105, lng: 139.8120 },
+        { id: 4, time: "15:00", title: "秋葉原", remarks: "扭蛋、買 Game、行中古店。搵絕版卡帶。", transport: null, lat: 35.6983, lng: 139.7731 }
+    ];
+
+    let map;
+
+    // 渲染時間線 (保留所有原有功能)
+    function renderTimeline() {
+        const container = document.getElementById('itinerary-list');
+        container.innerHTML = '';
+        itineraryData.forEach((item, index) => {
+            const isLast = index === itineraryData.length - 1;
+            let html = `
+                <div class="timeline-container pb-2">
+                    <div class="timeline-dot"></div>
+                    <div class="bg-white border border-gray-100 shadow-sm rounded-xl p-4 mt-2 mb-2">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-lg font-bold text-gray-800">${item.time} - ${item.title}</h3>
+                        </div>
+                        <div class="bg-yellow-50 p-3 rounded-lg border border-yellow-100 text-sm text-gray-700">
+                            <strong>💡 攻略：</strong><br>${item.remarks}
+                        </div>
+                    </div>
+            `;
+            if (item.transport && !isLast) {
+                html += `<div class="transport-line flex items-center gap-2"><span class="bg-gray-100 px-2 py-1 rounded text-xs font-medium text-gray-600">${item.transport.mode}</span><span>⏳ ${item.transport.duration}</span></div>`;
             }
+            html += `</div>`;
+            container.innerHTML += html;
+        });
+    }
+
+    function initMap() {
+        if (!map) {
+            map = L.map('map').setView([itineraryData[0].lat, itineraryData[0].lng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+            const latlngs = [];
+            itineraryData.forEach((item, index) => {
+                if (item.lat && item.lng) {
+                    L.marker([item.lat, item.lng]).addTo(map).bindPopup(`<b>${index + 1}. ${item.title}</b>`);
+                    latlngs.push([item.lat, item.lng]);
+                }
+            });
+            L.polyline(latlngs, {color: '#3b82f6', weight: 3, dashArray: '5, 5'}).addTo(map);
+        } else {
+            map.invalidateSize();
+        }
+    }
+
+    function switchTab(tab) {
+        document.getElementById('view-timeline').classList.add('hidden');
+        document.getElementById('view-map').classList.add('hidden');
+        document.getElementById('tab-timeline').classList.remove('tab-active', 'text-gray-500');
+        document.getElementById('tab-map').classList.remove('tab-active', 'text-gray-500');
+        if (tab === 'timeline') {
+            document.getElementById('view-timeline').classList.remove('hidden');
+            document.getElementById('tab-timeline').classList.add('tab-active');
+            document.getElementById('tab-map').classList.add('text-gray-500');
+        } else if (tab === 'map') {
+            document.getElementById('view-map').classList.remove('hidden');
+            document.getElementById('tab-map').classList.add('tab-active');
+            document.getElementById('tab-timeline').classList.add('text-gray-500');
+            initMap();
+        }
+    }
+
+    // 新增：CSV 匯出功能
+    function exportCSV() {
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // 加入 BOM 解決 Excel 中文亂碼
+        csvContent += "時間,景點,備註,交通方式,預計車程\n";
+        
+        itineraryData.forEach(row => {
+            const transportMode = row.transport ? row.transport.mode : "無";
+            const transportDuration = row.transport ? row.transport.duration : "無";
+            // 處理備註入面嘅換行同逗號
+            const remarks = `"${row.remarks.replace(/"/g, '""')}"`;
+            csvContent += `${row.time},${row.title},${remarks},${transportMode},${transportDuration}\n`;
         });
 
-        let userPos = null;
-        if(navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(pos => {
-                userPos = [pos.coords.latitude, pos.coords.longitude];
-                L.marker(userPos, { icon: L.divIcon({className: 'user-location-marker', iconSize:[16,16]}) }).addTo(map);
-                map.flyTo(userPos, 14);
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "tokyo_itinerary.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // 新增：主題切換 (8-bit 像素貓咪導遊)
+    function toggleTheme() {
+        document.body.classList.toggle('pixel-theme');
+        const isPixel = document.body.classList.contains('pixel-theme');
+        
+        // 模擬貓咪隨住時間線俾 Tips
+        if(isPixel) {
+            document.documentElement.style.setProperty('--btn-radius', '0px');
+            setTimeout(() => {
+                document.getElementById('cat-message').innerText = "喵... 記得買人形燒！";
+            }, 3000);
+        } else {
+            document.documentElement.style.setProperty('--btn-radius', '0.5rem');
+        }
+    }
+
+    // 新增：PWA Service Worker 註冊
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').then(reg => {
+                console.log('ServiceWorker 註冊成功', reg.scope);
+            }).catch(err => {
+                console.log('ServiceWorker 註冊失敗 (本地測試屬正常現象): ', err);
             });
-        }
+        });
+    }
 
-        async function initData() {
-            const statusText = document.getElementById('status-text');
-            const statusDot = document.getElementById('status-dot');
-
-            // 策略：使用政府 API 獲取最新的電單車停車場及路邊骨位資訊
-            // 呢個 endpoint 係政府最齊、會每日 update 嘅數據源
-            const url = 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://api.data.gov.hk/v1/carpark-info-vacancy?data=info');
-
-            try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error();
-                const data = await response.json();
-                
-                // 過濾出包含電單車類型的位置
-                const spots = data.results.filter(s => s.vehicleTypes && s.vehicleTypes.includes('motorCycle'));
-
-                renderMarkers(spots);
-                statusText.innerText = `已同步全港 ${spots.length} 個最新位置`;
-                statusDot.classList.replace('animate-pulse', 'bg-[#00ffcc]');
-                setTimeout(() => document.getElementById('status-badge').style.opacity = '0', 5000);
-            } catch (e) {
-                statusText.innerText = "連線受阻，請嘗試刷新頁面";
-                statusDot.classList.replace('bg-[#00ffcc]', 'bg-red-500');
-            }
-        }
-
-        function renderMarkers(spots) {
-            markers.clearLayers();
-            spots.forEach(spot => {
-                const lat = parseFloat(spot.latitude);
-                const lng = parseFloat(spot.longitude);
-                if(isNaN(lat) || isNaN(lng)) return;
-
-                const m = L.marker([lat, lng], {
-                    icon: L.divIcon({
-                        className: '',
-                        html: `<div style="background:#111; border:1.5px solid #00ffcc; color:#00ffcc; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:bold;">P</div>`,
-                        iconSize: [24, 24]
-                    })
-                });
-
-                m.on('click', () => {
-                    document.getElementById('spot-name').innerText = spot.displayAddress || spot.name || "政府位置";
-                    document.getElementById('btn-waze').href = `waze://?ll=${lat},${lng}&navigate=yes`;
-                    if(userPos) {
-                        const d = map.distance(userPos, [lat, lng]) / 1000;
-                        document.getElementById('route-dist').innerText = `直線距離: ${d.toFixed(1)} km`;
-                    }
-                    document.getElementById('bottom-sheet').classList.replace('sheet-closed', 'sheet-open');
-                });
-                markers.addLayer(m);
-            });
-            map.addLayer(markers);
-        }
-
-        function closeSheet() {
-            document.getElementById('bottom-sheet').classList.replace('sheet-open', 'sheet-closed');
-        }
-
-        initData();
-    </script>
+    renderTimeline();
+</script>
 </body>
 </html>
