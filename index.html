@@ -1,315 +1,411 @@
-<!DOCTYPE html>
-<html lang="zh-HK">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>全能旅行 Planner</title>
-    
-    <!-- PWA Manifest 連結 (需另外建立 manifest.json) -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#3b82f6">
-
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Leaflet CSS & JS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Google Fonts for Pixel Art Theme -->
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+HK:wght@400;700&display=swap" rel="stylesheet">
-
+<!-- ... existing code ... -->
     <style>
-        /* 基礎樣式 (現代主題) */
-        :root { --bg-color: #f9fafb; --text-color: #1f2937; --font-main: 'Noto Sans HK', sans-serif; }
-        body { font-family: var(--font-main); background-color: var(--bg-color); color: var(--text-color); transition: all 0.3s; }
-        
-        .timeline-container { border-left: 2px solid #e5e7eb; margin-left: 1rem; padding-left: 1.5rem; position: relative; }
-        .timeline-dot { position: absolute; left: -0.4rem; top: 1.5rem; width: 14px; height: 14px; border-radius: 50%; background-color: #3b82f6; border: 2px solid white; z-index: 2; transition: all 0.3s;}
-        .transport-line { border-left: 2px dashed #9ca3af; margin-left: -1.4rem; padding-left: 2.4rem; padding-top: 0.5rem; padding-bottom: 0.5rem; color: #6b7280; font-size: 0.875rem; }
-        #map { height: 60vh; border-radius: 0.5rem; z-index: 1; }
-        .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: bold; }
-
-        /* 復古像素主題 (Game Boy Style) - 取代 Dark Mode */
-        body.theme-retro { 
-            --bg-color: #e0f8d0; 
-            --text-color: #0f380f; 
-            --font-main: 'Press Start 2P', 'Noto Sans HK', monospace; 
+        /* 日系極簡風格設定 */
+        :root {
+            --bg-color: transparent;       /* 修改以顯示背景 */
+            --text-main: #333333;      /* 炭灰 */
+            --text-muted: #888888;
+            --accent-color: #7E998A;   /* 抹茶灰綠 */
+            --accent-hover: #678072;
+            --border-color: rgba(235, 235, 235, 0.6);
+            --card-bg: rgba(255, 255, 255, 0.85); /* 半透明框 */
         }
-        .theme-retro .bg-white { background-color: #c8e0b0 !important; border: 2px solid #0f380f !important; box-shadow: 4px 4px 0px #0f380f; border-radius: 0; }
-        .theme-retro .bg-blue-600 { background-color: #0f380f !important; color: #e0f8d0 !important; }
-        .theme-retro .text-gray-800, .theme-retro .text-gray-700, .theme-retro .text-gray-600 { color: #0f380f !important; }
-        .theme-retro .timeline-container { border-left: 4px solid #0f380f; }
-        .theme-retro .transport-line { border-left: 4px dashed #0f380f; font-family: 'Noto Sans HK', sans-serif; /* 交通保留易讀字體 */ }
-        
-        /* 虛擬導遊：8-bit 灰貓 Sprite */
-        .cat-guide { display: none; position: absolute; left: -1.2rem; top: 1.2rem; font-size: 1.5rem; z-index: 10; animation: bounce 1s infinite alternate; }
-        .theme-retro .cat-guide { display: block; }
-        .theme-retro .timeline-dot { display: none; } /* 隱藏原本圓點，用灰貓代替 */
 
-        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-5px); } }
-    </style>
-</head>
-<body>
+        .home-bg { background-image: url('https://i.imgur.com/qdzqxlE.png'); background-size: cover; background-position: center; background-attachment: fixed; min-height: 100vh; }
+        .trip-bg { background-image: url('https://i.imgur.com/mRK8ppC.png'); background-size: cover; background-position: center; background-attachment: fixed; min-height: 100vh; }
 
-<div class="max-w-md mx-auto bg-white min-h-screen shadow-lg relative app-container" id="app-container">
-    <!-- Header with Tools -->
-    <header class="bg-blue-600 text-white p-4 sticky top-0 z-20 shadow-md flex justify-between items-center">
-        <h1 class="text-lg font-bold">✈️ 東京三日遊</h1>
-        <div class="flex gap-2">
-            <button onclick="toggleTheme()" class="bg-white/20 hover:bg-white/30 p-2 rounded text-sm" title="切換主題">🎮</button>
-            <button onclick="exportCSV()" class="bg-white/20 hover:bg-white/30 p-2 rounded text-sm" title="匯出 CSV">📥</button>
-        </div>
-    </header>
+        body { 
+            font-family: 'Noto Sans HK', sans-serif; 
+            background-color: #F9F9F8; 
+<!-- ... existing code ... -->
+        /* 完成印章效果 */
+        .stamp-completed {
+            position: absolute; top: 10px; right: 10px;
+            color: var(--accent-color); border: 1px solid var(--accent-color);
+            padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;
+            transform: rotate(-5deg); opacity: 0.8; letter-spacing: 2px;
+        }
 
-    <!-- Tabs -->
-    <div class="flex border-b text-center bg-white sticky top-[60px] z-10 tab-container">
-        <button id="tab-timeline" class="flex-1 py-3 tab-active transition" onclick="switchTab('timeline')">📍 路線</button>
-        <button id="tab-map" class="flex-1 py-3 text-gray-500 transition" onclick="switchTab('map')">🗺️ 地圖</button>
-    </div>
+        /* 鎖定/模糊效果 - 移除模糊 */
+        .locked-content { opacity: 0.7; transition: all 0.5s; }
 
-    <!-- Content: Timeline -->
-    <div id="view-timeline" class="p-4">
-        <div id="itinerary-list"></div>
-        <button class="w-full mt-6 bg-blue-50 text-blue-600 border border-blue-200 py-3 rounded-lg font-bold hover:bg-blue-100 transition btn-add">
-            + 新增行程
-        </button>
-    </div>
+        .btn-primary { background-color: var(--accent-color); color: white; border-radius: 6px; padding: 0.75rem 1rem; text-align: center; cursor: pointer; transition: 0.3s; }
+<!-- ... existing code ... -->
+        const App = () => {
+            const [data, setData] = useState({ trips: [], customTransports: [] });
+<!-- ... existing code ... -->
+            const toggleArchiveTrip = (id) => {
+                const newTrips = data.trips.map(t => t.id === id ? { ...t, isArchived: !t.isArchived } : t);
+                syncData({ ...data, trips: newTrips });
+            };
 
-    <!-- Content: Map -->
-    <div id="view-map" class="p-4 hidden">
-        <div id="map" class="shadow-inner border border-gray-200"></div>
-    </div>
-</div>
+            const handleSaveSpot = (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                
+                let durationStr = [];
+                const hr = formData.get('transportDurationHr');
+                const min = formData.get('transportDurationMin');
+                if(hr) durationStr.push(`${hr} 小時`);
+                if(min) durationStr.push(`${min} 分鐘`);
 
-<script>
-    // 資料來源
-    const itineraryData = [
-        { id: 1, time: "09:00", title: "淺草寺 雷門", remarks: "必食人形燒！", transport: { mode: "🚇 銀座線", duration: "15 分鐘" }, lat: 35.7147, lng: 139.7966 },
-        { id: 2, time: "10:30", title: "晴空塔", remarks: "已預訂 11:00 門票。", transport: { mode: "🚶‍♂️ 步行", duration: "20 分鐘" }, lat: 35.7100, lng: 139.8107 },
-        { id: 3, time: "13:00", title: "燒肉午餐", remarks: "午市套餐性價比高。", transport: { mode: "🚃 半藏門線", duration: "40 分鐘" }, lat: 35.7105, lng: 139.8120 },
-        { id: 4, time: "15:00", title: "秋葉原", remarks: "買 Game、行中古店。", transport: null, lat: 35.6983, lng: 139.7731 }
-    ];
+                const spotData = {
+                    id: editingSpot ? editingSpot.id : 'spot_' + Date.now(),
+                    day: formData.get('day'),
+                    time: formData.get('time'),
+                    title: formData.get('title'),
+                    remarks: formData.get('remarks'),
+                    planB: formData.get('planB'),
+                    googleMapLink: formData.get('googleMapLink'),
+                    transport: {
+                        mode: formData.get('transportMode'),
+                        detail: formData.get('transportDetail'),
+                        duration: durationStr.length > 0 ? durationStr.join(' ') : formData.get('transportDuration') || '' // 兼容舊數據
+                    },
+                    isCompleted: editingSpot ? editingSpot.isCompleted : false
+                };
 
-    let map, markers = [];
+                let newSpots;
+                if (editingSpot) {
+<!-- ... existing code ... -->
+            const generateGoogleMapRoute = (spotsInDay) => {
+                const validSpots = spotsInDay.filter(s => s.title);
+                if (validSpots.length === 0) return '#';
+                if (validSpots.length === 1) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(validSpots[0].title)}`;
+                
+                const origin = encodeURIComponent(validSpots[0].title);
+                const dest = encodeURIComponent(validSpots[validSpots.length - 1].title);
+                const waypoints = validSpots.slice(1, -1).map(s => encodeURIComponent(s.title)).join('|');
+                
+                return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&waypoints=${waypoints}&travelmode=driving`;
+            };
 
-    // 1. 渲染時間線 (加入虛擬灰貓導遊)
-    function renderTimeline() {
-        const container = document.getElementById('itinerary-list');
-        container.innerHTML = '';
-        itineraryData.forEach((item, index) => {
-            const isLast = index === itineraryData.length - 1;
-            let html = `
-                <div class="timeline-container pb-2">
-                    <div class="timeline-dot"></div>
-                    <!-- 虛擬導遊：像素灰貓 🐱 -->
-                    <div class="cat-guide">🐈‍⬛</div>
-                    
-                    <div class="bg-white border border-gray-100 shadow-sm rounded-xl p-4 mt-2 mb-2 card-item">
-                        <h3 class="text-lg font-bold text-gray-800">${item.time} - ${item.title}</h3>
-                        <div class="bg-yellow-50 p-2 mt-2 rounded border border-yellow-10收到！為咗確保功能完整過渡，**原有嘅時間線、地圖預覽、交通同攻略備註已經全部保留（絕對冇刪減任何原有功能）**。
+            const exportTrip = () => {
+                const trip = activeTrip;
+                if (!trip) return;
+                const lists = trip.checklists || [{ title: '預設清單', items: trip.checklist || [] }];
+                let html = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>${trip.title} - 匯出行程</title>
+                    <style>
+                        body { font-family: 'Noto Sans HK', sans-serif; background-image: url('https://i.imgur.com/mRK8ppC.png'); background-size: cover; background-position: center; background-attachment: fixed; padding: 20px; color: #333; }
+                        .container { max-width: 800px; margin: 0 auto; background: rgba(255, 255, 255, 0.9); padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); backdrop-filter: blur(5px); }
+                        h1 { border-bottom: 2px solid #7E998A; padding-bottom: 10px; color: #4a5d53; }
+                        .day-header { background: #7E998A; color: white; padding: 8px 15px; border-radius: 6px; margin-top: 30px; display: inline-block; font-weight: bold; }
+                        .spot { border-left: 4px solid #7E998A; margin: 15px 0 15px 10px; padding-left: 15px; background: rgba(255,255,255,0.6); padding: 15px; border-radius: 0 8px 8px 0; }
+                        .time { color: #7E998A; font-weight: bold; margin-right: 10px; }
+                        .checklist-box { margin-top: 40px; background: rgba(255,255,255,0.7); padding: 20px; border-radius: 8px; border: 1px solid #ddd; }
+                        ul { list-style-type: none; padding-left: 0; }
+                        li { margin-bottom: 5px; }
+                        li::before { content: '☐ '; color: #888; font-weight: bold; margin-right: 5px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h1>${trip.title}</h1>
+                `;
 
-我喺原有基礎上加入咗以下功能：
-1. **一鍵匯出 CSV**（方便 Backup 或 share 俾朋友）。
-2. **像素風主題切換 & 虛擬導遊**（特登避開咗一般嘅 Dark Mode，改為加入一個 8-bit 風格嘅「灰貓導遊」，切換主題時會有復古 Game Boy UI 嘅感覺）。
-3. **PWA 離線支援準備**（加入咗 Service Worker 註冊碼）。
+                const gSpots = trip.spots.reduce((acc, s) => { (acc[s.day] = acc[s.day] || []).push(s); return acc; }, {});
+                Object.keys(gSpots).sort().forEach(day => {
+                    html += `<div class="day-header">${day}</div>`;
+                    gSpots[day].forEach(s => {
+                        html += `<div class="spot">
+                            <h3><span class="time">${s.time}</span> ${s.title} ${s.isCompleted ? '✅' : ''}</h3>
+                            ${s.remarks ? `<p>${s.remarks.replace(/\n/g, '<br>')}</p>` : ''}
+                            ${s.transport && (s.transport.mode || s.transport.detail || s.transport.duration) ? `<p><small>🚙 交通: ${s.transport.mode||''} ${s.transport.detail||''} ${s.transport.duration ? `(${s.transport.duration})` : ''}</small></p>` : ''}
+                        </div>`;
+                    });
+                });
 
-### 更新版完整 HTML 代碼 (`index.html`)
+                html += `<div class="checklist-box"><h2>🎒 行李及清單</h2>`;
+                lists.forEach(list => {
+                    if (list.items && list.items.length > 0) {
+                        html += `<h3>${list.title}</h3><ul>`;
+                        list.items.forEach(item => { html += `<li>${item.done ? '✅ ' : ''}${item.text}</li>`; });
+                        html += `</ul>`;
+                    }
+                });
+                html += `</div></div></body></html>`;
 
-```html
-<!DOCTYPE html>
-<html lang="zh-HK">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>簡潔旅行 Planner</title>
-    <!-- Tailwind CSS -->
-    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
-    <!-- Leaflet CSS & JS -->
-    <link rel="stylesheet" href="[https://unpkg.com/leaflet@1.9.4/dist/leaflet.css](https://unpkg.com/leaflet@1.9.4/dist/leaflet.css)"/>
-    <script src="[https://unpkg.com/leaflet@1.9.4/dist/leaflet.js](https://unpkg.com/leaflet@1.9.4/dist/leaflet.js)"></script>
-    <!-- Google Fonts for Pixel Theme -->
-    <link href="[https://fonts.googleapis.com/css2?family=DotGothic16&display=swap](https://fonts.googleapis.com/css2?family=DotGothic16&display=swap)" rel="stylesheet">
-    <link rel="manifest" href="manifest.json">
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9fafb; transition: all 0.3s; }
-        .timeline-container { border-left: 2px solid #e5e7eb; margin-left: 1rem; padding-left: 1.5rem; position: relative; }
-        .timeline-dot { position: absolute; left: -0.4rem; top: 1.5rem; width: 12px; height: 12px; border-radius: 50%; background-color: #3b82f6; border: 2px solid white; }
-        .transport-line { border-left: 2px dashed #9ca3af; margin-left: -1.4rem; padding-left: 2.4rem; padding-top: 0.5rem; padding-bottom: 0.5rem; color: #6b7280; font-size: 0.875rem; }
-        #map { height: 60vh; border-radius: 0.5rem; z-index: 1; }
-        .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: bold; }
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${trip.title}_行程.html`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
 
-        /* 8-bit 像素風主題 (替代傳統 Dark Mode) */
-        body.pixel-theme { font-family: 'DotGothic16', sans-serif; background-color: #e0f8d0; color: #081820; }
-        .pixel-theme .bg-white { background-color: #88c070 !important; border: 4px solid #346856; border-radius: 0; box-shadow: 4px 4px 0px #081820; }
-        .pixel-theme .bg-blue-600 { background-color: #346856 !important; border-bottom: 4px solid #081820; }
-        .pixel-theme .text-gray-800, .pixel-theme .text-gray-700, .pixel-theme .text-gray-500, .pixel-theme .text-gray-600 { color: #081820 !important; }
-        .pixel-theme .bg-yellow-50 { background-color: #e0f8d0 !important; border: 2px dashed #346856; }
-        .pixel-theme .timeline-dot { background-color: #e0f8d0; border: 2px solid #081820; border-radius: 0; }
-        .pixel-theme .transport-line { border-left: 2px dashed #081820; }
-        
-        /* 灰貓導遊 UI */
-        #cat-guide { position: fixed; bottom: 20px; right: 20px; background: white; padding: 10px; border: 3px solid #3b82f6; border-radius: 12px; display: none; z-index: 50; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .pixel-theme #cat-guide { display: flex; align-items: center; gap: 10px; background: #e0f8d0; border: 4px solid #081820; border-radius: 0; box-shadow: 4px 4px 0px #081820; }
-        .cat-sprite { font-size: 2rem; image-rendering: pixelated; }
-    </style>
-</head>
-<body class="text-gray-800">
+            if (view === 'home') {
+                return (
+                    <div className="home-bg">
+                        <div className="max-w-md mx-auto min-h-screen relative pb-20 bg-white/40 backdrop-blur-sm">
+                            <header className="pt-12 pb-6 px-6 bg-white/60 backdrop-blur-md border-b border-gray-100/50 mb-4 sticky top-0 z-20 shadow-sm">
+                                <h1 className="text-3xl text-gray-800 tracking-wider font-bold shadow-sm">Yutori <span className="text-xl text-gray-600">ゆとり</span></h1>
+                                <p className="text-sm text-gray-700 mt-2 font-medium">你的專屬行程手帳</p>
+                            </header>
 
-<div class="max-w-md mx-auto bg-white min-h-screen shadow-lg relative pb-20">
-    <!-- Header -->
-    <header class="bg-blue-600 text-white p-4 sticky top-0 z-20 shadow-md flex justify-between items-center">
-        <h1 class="text-xl font-bold">✈️ 東京 Planner</h1>
-        <div class="flex gap-2">
-            <button onclick="exportCSV()" class="bg-white/20 hover:bg-white/30 p-2 rounded text-sm transition">📥 CSV</button>
-            <button onclick="toggleTheme()" class="bg-white/20 hover:bg-white/30 p-2 rounded text-sm transition">👾 8-Bit</button>
-        </div>
-    </header>
+                            <div className="px-4 space-y-4 relative z-10">
+                                <h2 className="text-sm font-bold text-gray-800 mb-2 drop-shadow-sm">進行中的行程</h2>
+                                {data.trips.filter(t => !t.isArchived).length === 0 ? (
+<!-- ... existing code ... -->
+                                <button type="submit" className="w-full btn-primary font-bold mt-4">儲存</button>
+                            </form>
+                        </Modal>
 
-    <!-- Tabs -->
-    <div class="flex border-b text-center bg-white sticky top-[68px] z-10">
-        <button id="tab-timeline" class="flex-1 py-3 tab-active transition" onclick="switchTab('timeline')">📍 時間線</button>
-        <button id="tab-map" class="flex-1 py-3 text-gray-500 transition" onclick="switchTab('map')">🗺️ 地圖</button>
-    </div>
-
-    <!-- Content: Timeline -->
-    <div id="view-timeline" class="p-4">
-        <div id="itinerary-list"></div>
-        <button class="w-full mt-6 bg-blue-50 text-blue-600 border border-blue-200 py-3 rounded-lg font-medium hover:bg-blue-100 transition" style="border-radius: var(--btn-radius, 0.5rem);">
-            + 新增行程
-        </button>
-    </div>
-
-    <!-- Content: Map -->
-    <div id="view-map" class="p-4 hidden">
-        <div id="map" class="shadow-inner border border-gray-200"></div>
-    </div>
-    
-    <!-- 8-Bit 灰貓導遊 -->
-    <div id="cat-guide">
-        <div class="cat-sprite">🐱</div>
-        <div class="text-sm font-bold" id="cat-message">喵！準備出發去淺草寺！</div>
-    </div>
-</div>
-
-<script>
-    const itineraryData = [
-        { id: 1, time: "09:00", title: "淺草寺 雷門", remarks: "提早去避開人潮。必食仲見世通嘅人形燒！記得買御守。", transport: { mode: "🚇 銀座線", duration: "約 15 分鐘" }, lat: 35.7147, lng: 139.7966 },
-        { id: 2, time: "10:30", title: "晴空塔 (Skytree)", remarks: "已預訂 11:00 觀景台門票。", transport: { mode: "🚶‍♂️ 步行", duration: "約 20 分鐘" }, lat: 35.7100, lng: 139.8107 },
-        { id: 3, time: "13:00", title: "敘敘苑 燒肉 (押上店)", remarks: "午市套餐性價比最高。", transport: { mode: "🚃 轉乘山手線", duration: "約 40 分鐘" }, lat: 35.7105, lng: 139.8120 },
-        { id: 4, time: "15:00", title: "秋葉原", remarks: "扭蛋、買 Game、行中古店。搵絕版卡帶。", transport: null, lat: 35.6983, lng: 139.7731 }
-    ];
-
-    let map;
-
-    // 渲染時間線 (保留所有原有功能)
-    function renderTimeline() {
-        const container = document.getElementById('itinerary-list');
-        container.innerHTML = '';
-        itineraryData.forEach((item, index) => {
-            const isLast = index === itineraryData.length - 1;
-            let html = `
-                <div class="timeline-container pb-2">
-                    <div class="timeline-dot"></div>
-                    <div class="bg-white border border-gray-100 shadow-sm rounded-xl p-4 mt-2 mb-2">
-                        <div class="flex justify-between items-start mb-2">
-                            <h3 class="text-lg font-bold text-gray-800">${item.time} - ${item.title}</h3>
-                        </div>
-                        <div class="bg-yellow-50 p-3 rounded-lg border border-yellow-100 text-sm text-gray-700">
-                            <strong>💡 攻略：</strong><br>${item.remarks}
+                        <ConfirmModal {...confirmDialog} onCancel={() => setConfirmDialog({ isOpen: false })} />
                         </div>
                     </div>
-            `;
-            if (item.transport && !isLast) {
-                html += `<div class="transport-line flex items-center gap-2"><span class="bg-gray-100 px-2 py-1 rounded text-xs font-medium text-gray-600">${item.transport.mode}</span><span>⏳ ${item.transport.duration}</span></div>`;
+                );
             }
-            html += `</div>`;
-            container.innerHTML += html;
-        });
-    }
 
-    function initMap() {
-        if (!map) {
-            map = L.map('map').setView([itineraryData[0].lat, itineraryData[0].lng], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
-            const latlngs = [];
-            itineraryData.forEach((item, index) => {
-                if (item.lat && item.lng) {
-                    L.marker([item.lat, item.lng]).addTo(map).bindPopup(`<b>${index + 1}. ${item.title}</b>`);
-                    latlngs.push([item.lat, item.lng]);
-                }
-            });
-            L.polyline(latlngs, {color: '#3b82f6', weight: 3, dashArray: '5, 5'}).addTo(map);
-        } else {
-            map.invalidateSize();
-        }
-    }
+            // 組織資料：將 spots 按 Day 分組
+            const groupedSpots = activeTrip.spots.reduce((acc, spot) => {
+                if (!acc[spot.day]) acc[spot.day] = [];
+                acc[spot.day].push(spot);
+                return acc;
+            }, {});
+            const sortedDays = Object.keys(groupedSpots).sort();
 
-    function switchTab(tab) {
-        document.getElementById('view-timeline').classList.add('hidden');
-        document.getElementById('view-map').classList.add('hidden');
-        document.getElementById('tab-timeline').classList.remove('tab-active', 'text-gray-500');
-        document.getElementById('tab-map').classList.remove('tab-active', 'text-gray-500');
-        if (tab === 'timeline') {
-            document.getElementById('view-timeline').classList.remove('hidden');
-            document.getElementById('tab-timeline').classList.add('tab-active');
-            document.getElementById('tab-map').classList.add('text-gray-500');
-        } else if (tab === 'map') {
-            document.getElementById('view-map').classList.remove('hidden');
-            document.getElementById('tab-map').classList.add('tab-active');
-            document.getElementById('tab-timeline').classList.add('text-gray-500');
-            initMap();
-        }
-    }
+            return (
+                <div className="trip-bg">
+                    <div className="max-w-md mx-auto min-h-screen relative flex flex-col pb-20 bg-white/40 backdrop-blur-sm">
+                        {/* Header */}
+                        <header className="relative h-48 flex items-end p-4 rounded-b-xl overflow-hidden shadow-sm">
+                            <img src={activeTrip.cover} className="absolute inset-0 w-full h-full object-cover opacity-70" alt="cover"/>
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+                            <div className="relative z-10 w-full flex justify-between items-end">
+                                <div>
+                                    <button onClick={() => setView('home')} className="text-white/90 text-sm mb-2 hover:text-white font-medium bg-black/30 backdrop-blur-sm px-2 py-1 rounded">← 返回手帳</button>
+                                    <h1 className="text-2xl text-white font-bold serif-font drop-shadow-md">{activeTrip.title}</h1>
+                                </div>
+                                <button onClick={exportTrip} className="bg-white/20 hover:bg-white/40 text-white border border-white/50 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm mb-1">
+                                    匯出行程
+                                </button>
+                            </div>
+                        </header>
 
-    // 新增：CSV 匯出功能
-    function exportCSV() {
-        let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // 加入 BOM 解決 Excel 中文亂碼
-        csvContent += "時間,景點,備註,交通方式,預計車程\n";
-        
-        itineraryData.forEach(row => {
-            const transportMode = row.transport ? row.transport.mode : "無";
-            const transportDuration = row.transport ? row.transport.duration : "無";
-            // 處理備註入面嘅換行同逗號
-            const remarks = `"${row.remarks.replace(/"/g, '""')}"`;
-            csvContent += `${row.time},${row.title},${remarks},${transportMode},${transportDuration}\n`;
-        });
+                        {/* Tabs */}
+                        <div className="flex border-b border-white/30 text-center sticky top-0 z-20 shadow-sm bg-white/70 backdrop-blur-md">
+                            <button className={`flex-1 py-3 text-sm transition ${currentTab === 'timeline' ? 'border-b-2 border-[#7E998A] text-[#7E998A] font-bold' : 'text-gray-700 font-medium'}`} onClick={() => setCurrentTab('timeline')}>路線手帳</button>
+                            <button className={`flex-1 py-3 text-sm transition ${currentTab === 'map' ? 'border-b-2 border-[#7E998A] text-[#7E998A] font-bold' : 'text-gray-700 font-medium'}`} onClick={() => setCurrentTab('map')}>地圖導航</button>
+                            <button className={`flex-1 py-3 text-sm transition ${currentTab === 'checklist' ? 'border-b-2 border-[#7E998A] text-[#7E998A] font-bold' : 'text-gray-700 font-medium'}`} onClick={() => setCurrentTab('checklist')}>行李清單</button>
+                        </div>
 
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "tokyo_itinerary.csv");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
+                        {/* Content: Timeline */}
+                        {currentTab === 'timeline' && (
+                            <div className="p-4 bg-transparent flex-1">
+                                {sortedDays.length === 0 ? (
+                                    <div className="text-center text-gray-600 font-medium mt-10 text-sm drop-shadow-sm">點擊下方按鈕加入第一站</div>
+                                ) : (
+                                    sortedDays.map(day => (
+                                        <div key={day} className="mb-8">
+                                            <div className="bg-[#EBEBEB]/80 backdrop-blur text-[#555] px-3 py-1 rounded-full inline-block text-xs font-bold mb-4 ml-2 shadow-sm">{day}</div>
+                                            
+                                            {groupedSpots[day].map((spot, index) => {
+                                                const isLast = index === groupedSpots[day].length - 1;
+                                                const prevSpot = index > 0 ? groupedSpots[day][index - 1] : null;
+                                                const isLocked = prevSpot && !prevSpot.isCompleted;
+                                                
+                                                let dotClass = "timeline-dot";
+                                                if (spot.isCompleted) dotClass += " completed";
+                                                else if (!isLocked) dotClass += " active";
 
-    // 新增：主題切換 (8-bit 像素貓咪導遊)
-    function toggleTheme() {
-        document.body.classList.toggle('pixel-theme');
-        const isPixel = document.body.classList.contains('pixel-theme');
-        
-        // 模擬貓咪隨住時間線俾 Tips
-        if(isPixel) {
-            document.documentElement.style.setProperty('--btn-radius', '0px');
-            setTimeout(() => {
-                document.getElementById('cat-message').innerText = "喵... 記得買人形燒！";
-            }, 3000);
-        } else {
-            document.documentElement.style.setProperty('--btn-radius', '0.5rem');
-        }
-    }
+                                                return (
+                                                    <div key={spot.id} className="timeline-container pb-4">
+                                                        <div className={dotClass}></div>
+                                                        
+                                                        <div className={`yutori-card p-4 mt-1 transition relative overflow-hidden ${isLocked ? 'locked-content' : ''}`}>
+                                                            {spot.isCompleted && <div className="stamp-completed">済</div>}
+                                                            
+                                                            <div className="flex justify-between items-start mb-1">
+                                                                <h3 className={`text-lg font-bold ${spot.isCompleted ? 'text-gray-400' : 'text-gray-800'}`}>
+                                                                    <span className="text-[#7E998A] mr-2">{spot.time}</span> {spot.title}
+                                                                </h3>
+                                                                <div className="flex gap-2 items-center pointer-events-auto">
+                                                                    <button onClick={() => handleCheckIn(spot.id)} className={`text-xs px-2 py-1 rounded border transition ${spot.isCompleted ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-[#7E998A]/10 text-[#7E998A] border-[#7E998A] hover:bg-[#7E998A] hover:text-white'}`}>
+                                                                        {spot.isCompleted ? '取消打卡' : '📸 打卡'}
+                                                                    </button>
+                                                                    <button onClick={() => { setEditingSpot(spot); setSpotModalOpen(true); }} className="text-gray-400 hover:text-[#7E998A] text-lg">✎</button>
+                                                                </div>
+                                                            </div>
 
-    // 新增：PWA Service Worker 註冊
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js').then(reg => {
-                console.log('ServiceWorker 註冊成功', reg.scope);
-            }).catch(err => {
-                console.log('ServiceWorker 註冊失敗 (本地測試屬正常現象): ', err);
-            });
-        });
-    }
+                                                            {spot.remarks && <div className="text-sm text-gray-600 mb-3 whitespace-pre-line mt-2 font-medium">{spot.remarks}</div>}
+                                                            
+                                                            {spot.googleMapLink && (
+                                                                <a href={spot.googleMapLink} target="_blank" rel="noreferrer" className="inline-block text-xs bg-blue-50/80 backdrop-blur text-blue-600 px-2 py-1 rounded mb-3 pointer-events-auto border border-blue-100/50">
+                                                                    📍 打開地圖定位
+                                                                </a>
+                                                            )}
 
-    renderTimeline();
-</script>
+                                                            {spot.planB && (
+                                                                <details className="mt-3 text-xs bg-[#FAF8F5]/80 backdrop-blur rounded p-2 border border-[#EBEBEB] cursor-pointer pointer-events-auto group">
+                                                                    <summary className="font-bold text-[#A68A6D] flex justify-between items-center list-none">
+                                                                        <span>☔ 備案 Plan B</span><span className="group-open:rotate-180 transition">▼</span>
+                                                                    </summary>
+                                                                    <div className="mt-2 text-gray-600 pt-2 border-t border-[#EBEBEB]">{spot.planB}</div>
+                                                                </details>
+                                                            )}
+                                                        </div>
+
+                                                        {/* 交通指引 */}
+                                                        {spot.transport && (spot.transport.mode || spot.transport.detail || spot.transport.duration) && !isLast && (
+                                                            <div className={`ml-[-1.5rem] pl-[2.5rem] py-3 border-l border-dashed border-[#cccccc] text-xs text-gray-700 font-medium ${isLocked ? 'locked-content' : ''}`}>
+                                                                {spot.transport.mode && <span className="bg-white/80 backdrop-blur border border-gray-200 px-2 py-1 rounded shadow-sm mr-2">{spot.transport.mode}</span>}
+                                                                {spot.transport.detail} <span className="text-gray-500 ml-1">{spot.transport.duration ? `(${spot.transport.duration})` : ''}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ))
+                                )}
+                                
+                                <button onClick={() => { setEditingSpot(null); setSpotModalOpen(true); }} className="w-full mt-2 border-2 border-dashed border-[#C0CFC7] bg-white/40 backdrop-blur-sm text-[#7E998A] py-3 rounded-lg font-bold hover:bg-[#F0F5F2] transition text-sm">
+                                    + 新增景點
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Content: Map (Google Maps Route Integration) */}
+                        {currentTab === 'map' && (
+                            <div className="p-4 bg-transparent flex-1">
+                                <div className="bg-blue-50/90 backdrop-blur-sm border border-blue-100 text-blue-700 text-xs p-3 rounded-lg mb-4 leading-relaxed shadow-sm">
+                                    💡 系統已根據你的行程，自動按日生成 <b>Google Maps 導航路線</b>。點擊下方按鈕即可跳轉至 Google Maps App 開始導航。
+                                </div>
+                                
+                                {sortedDays.length === 0 ? (
+                                    <div className="text-center text-gray-600 font-medium mt-10 text-sm drop-shadow-sm">沒有可顯示的路線</div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {sortedDays.map(day => (
+                                            <div key={day} className="yutori-card p-4">
+                                                <h3 className="font-bold text-gray-800 mb-2 border-b pb-2">{day} 路線</h3>
+<!-- ... existing code ... -->
+                                        {/* Destination General Map Iframe (No API key needed for search embed) */}
+                                        <div className="mt-6 rounded-lg overflow-hidden shadow-sm border border-gray-200">
+                                            <iframe 
+                                                width="100%" height="250" style={{ border: 0 }} loading="lazy" allowFullScreen
+                                                src={`https://maps.google.com/maps?q=${encodeURIComponent(activeTrip.title)}&t=&z=10&ie=UTF8&iwloc=&output=embed`}>
+                                            </iframe>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Content: Checklist */}
+                        {currentTab === 'checklist' && (
+                            <div className="p-4 bg-transparent flex-1">
+                                {(() => {
+                                    const lists = activeTrip.checklists || [{ id: 'default', title: '預設清單', items: activeTrip.checklist || [] }];
+                                    return (
+                                        <div className="space-y-4">
+                                            {lists.map((list) => (
+                                                <div key={list.id} className="yutori-card p-4 shadow-sm">
+                                                    <div className="flex justify-between items-center mb-4">
+                                                        <h3 className="font-bold text-gray-800 text-sm">{list.title}</h3>
+                                                        {list.id !== 'default' && (
+                                                            <button onClick={() => {
+                                                                if(confirm('確定要刪除此清單分類嗎？')) {
+                                                                    const newLists = lists.filter(l => l.id !== list.id);
+                                                                    syncData({ ...data, trips: data.trips.map(t => t.id === activeTrip.id ? { ...t, checklists: newLists } : t) });
+                                                                }
+                                                            }} className="text-red-400 hover:text-red-600 text-xs font-bold">刪除分類</button>
+                                                        )}
+                                                    </div>
+                                                    <ul className="space-y-3 mb-4">
+                                                        {list.items.map(item => (
+                                                            <li key={item.id} className="flex items-start gap-3">
+                                                                <input type="checkbox" checked={item.done} onChange={() => {
+                                                                    const newLists = lists.map(l => l.id === list.id ? { ...l, items: l.items.map(c => c.id === item.id ? { ...c, done: !c.done } : c) } : l);
+                                                                    syncData({ ...data, trips: data.trips.map(t => t.id === activeTrip.id ? { ...t, checklists: newLists } : t) });
+                                                                }} className="w-5 h-5 mt-0.5 accent-[#7E998A] cursor-pointer" />
+                                                                <span className={`flex-1 text-sm ${item.done ? 'line-through text-gray-400' : 'text-gray-700 font-medium'}`}>{item.text}</span>
+                                                                <button onClick={() => {
+                                                                    const newLists = lists.map(l => l.id === list.id ? { ...l, items: l.items.filter(c => c.id !== item.id) } : l);
+                                                                    syncData({ ...data, trips: data.trips.map(t => t.id === activeTrip.id ? { ...t, checklists: newLists } : t) });
+                                                                }} className="text-gray-300 hover:text-red-400 text-lg">×</button>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                    <input type="text" placeholder="輸入項目按 Enter 新增..." onKeyDown={(e) => {
+                                                        if(e.key === 'Enter' && e.target.value.trim() !== '') {
+                                                            const newItem = { id: 'c_' + Date.now(), text: e.target.value, done: false };
+                                                            const newLists = lists.map(l => l.id === list.id ? { ...l, items: [...l.items, newItem] } : l);
+                                                            syncData({ ...data, trips: data.trips.map(t => t.id === activeTrip.id ? { ...t, checklists: newLists } : t) });
+                                                            e.target.value = '';
+                                                        }
+                                                    }} className="yutori-input text-sm bg-gray-50/50 backdrop-blur-sm border-white/50 shadow-inner"/>
+                                                </div>
+                                            ))}
+                                            <button onClick={() => {
+                                                const title = prompt('請輸入新清單名稱 (例如: 手信清單, 藥物清單)');
+                                                if (title && title.trim()) {
+                                                    const newList = { id: 'list_' + Date.now(), title: title.trim(), items: [] };
+                                                    syncData({ ...data, trips: data.trips.map(t => t.id === activeTrip.id ? { ...t, checklists: [...lists, newList] } : t) });
+                                                }
+                                            }} className="w-full py-3 border-2 border-dashed border-[#7E998A]/60 text-[#7E998A] rounded-lg text-sm font-bold hover:bg-[#7E998A]/10 transition backdrop-blur-sm bg-white/40">
+                                                + 新增清單分類
+                                            </button>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
+
+                        {/* 景點 CRUD Modal */}
+<!-- ... existing code ... -->
+                                <div>
+                                    <label className="block text-xs text-[#A68A6D] mb-1">☔ Plan B 備案</label>
+                                    <textarea name="planB" defaultValue={editingSpot?.planB} rows="1" className="yutori-input text-sm bg-[#FAF8F5] border-[#EBEBEB]"></textarea>
+                                </div>
+
+                                <div className="bg-gray-50/90 backdrop-blur-sm p-3 rounded-lg border border-gray-100 shadow-inner">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="block text-xs font-bold text-gray-600">前往下一站交通</label>
+                                        <button type="button" onClick={() => setTransportModalOpen(true)} className="text-xs text-blue-500 hover:underline">管理選項</button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <select name="transportMode" defaultValue={editingSpot?.transport?.mode} className="yutori-input text-sm py-2 bg-white">
+                                            <option value="">選擇交通工具...</option>
+                                            {data.customTransports.map(m => <option key={m} value={m}>{m}</option>)}
+                                        </select>
+                                        <input name="transportDetail" defaultValue={editingSpot?.transport?.detail} placeholder="手動填寫：例如 'JR 山手線'" className="yutori-input text-sm py-2 bg-white" />
+                                        <div className="flex gap-2 items-center">
+                                            <input type="number" name="transportDurationHr" defaultValue={editingSpot?.transport?.duration?.match(/(\d+)\s*小時/)?.[1] || ""} placeholder="時" className="yutori-input text-sm py-2 w-20 text-center bg-white" /> 
+                                            <span className="text-xs text-gray-500 font-bold">小時</span>
+                                            <input type="number" name="transportDurationMin" defaultValue={editingSpot?.transport?.duration?.match(/(\d+)\s*分鐘/)?.[1] || ""} placeholder="分" className="yutori-input text-sm py-2 w-20 text-center bg-white" /> 
+                                            <span className="text-xs text-gray-500 font-bold">分鐘</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 flex gap-2">
+<!-- ... existing code ... -->
+                                {data.customTransports.map(mode => (
+                                    <span key={mode} className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                                        {mode}
+                                        <button onClick={() => removeTransportMode(mode)} className="text-red-400 hover:text-red-600 font-bold">&times;</button>
+                                    </span>
+                                ))}
+                            </div>
+                            <input type="text" placeholder="輸入新分類並按 Enter (例如: 🛳️ 渡輪)" onKeyDown={addTransportMode} className="yutori-input mt-4 text-sm" />
+                        </div>
+                    </Modal>
+
+                    <ConfirmModal {...confirmDialog} onCancel={() => setConfirmDialog({ isOpen: false })} />
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
